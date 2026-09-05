@@ -1,0 +1,21 @@
+# CLEANPLATE backend — shared engine
+# Core service
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+pydantic==2.10.4
+python-multipart==0.0.20
+websockets==14.1
+
+# Imaging / video I/O (CPU-capable reference implementations)
+pillow==11.1.0
+numpy==2.2.1
+imageio==2.36.1
+imageio-ffmpeg==0.5.1          # ships a static ffmpeg — real MP4 read/write, no system dep
+
+# Optional acceleration (auto-detected at boot; NOT required to run):
+#   torch / torchvision            CUDA / ROCm / MPS device + half precision
+#   onnxruntime                    ONNX CPU fallback
+#   opencv-python-headless         faster inpaint / optical flow
+#   realesrgan, gfpgan, codeformer, lama-cleaner, rife-ncnn ...  model backends
+# These are declared per-tool in cleanplate/models_registry.py and fetched on
+# first run by the model downloader — never bundled.

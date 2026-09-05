@@ -1,0 +1,47 @@
+{
+  "brand": {
+    "name": "CLEANPLATE",
+    "tagline": "Remove it. Rebuild it. Ship it.",
+    "sub": "Eight restoration tools, one queue, running on your own machine."
+  },
+  "dark": {
+    "bg-void": "#08090B",
+    "bg-surface": "#101216",
+    "bg-raised": "#171A1F",
+    "border": "#23272E",
+    "border-hot": "#3A404A",
+    "text-hi": "#ECEEF1",
+    "text-mid": "#9BA1AB",
+    "text-low": "#646B76",
+    "accent": "#FFB020",
+    "accent-press": "#E09612",
+    "diff": "#22D3EE",
+    "danger": "#FF5A52",
+    "ok": "#4ADE80"
+  },
+  "light": {
+    "bg-void": "#F7F8FA",
+    "bg-surface": "#FFFFFF",
+    "bg-raised": "#FBFCFD",
+    "border": "#E3E6EB",
+    "border-hot": "#C7CCD4",
+    "text-hi": "#0C0E12",
+    "text-mid": "#565C66",
+    "text-low": "#8A909A",
+    "accent": "#B26A00",
+    "accent-press": "#8F5400",
+    "diff": "#0E93A8",
+    "danger": "#D93A32",
+    "ok": "#1F9D57"
+  },
+  "radius": {
+    "control": "6px",
+    "card": "10px",
+    "input": "2px",
+    "monogram": "4px"
+  },
+  "window": {
+    "backgroundColor": "#08090B",
+    "titleBarColor": "#101216"
+  }
+}

@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Node
+node_modules/
+dist/
+.next/
+out/
+.turbo/
+*.tsbuildinfo
+
+# Rust / Tauri
+target/
+desktop/src-tauri/target/
+
+# CLEANPLATE runtime state (models, jobs, db) — never commit user media
+.cleanplate/
+*.db
+*.db-wal
+*.db-shm
+
+# Env / secrets
+.env
+.env.local
+*.local
+
+# OS
+.DS_Store
+Thumbs.db
