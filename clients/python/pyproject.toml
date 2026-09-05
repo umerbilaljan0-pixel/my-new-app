@@ -1,0 +1,18 @@
+[project]
+name = "cleanplate-client"
+version = "1.0.0"
+description = "Python client for the CLEANPLATE engine (/v1 API). Stdlib only."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+dependencies = []
+
+[project.scripts]
+cleanplate = "cleanplate_client:__main__"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+py-modules = ["cleanplate_client"]

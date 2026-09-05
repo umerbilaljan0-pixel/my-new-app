@@ -34,3 +34,6 @@ desktop/src-tauri/target/
 # OS
 .DS_Store
 Thumbs.db
+
+# stray API-client sample outputs
+out_*.png

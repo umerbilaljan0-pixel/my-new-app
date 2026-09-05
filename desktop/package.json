@@ -1,0 +1,19 @@
+{
+  "name": "cleanplate-desktop",
+  "private": true,
+  "version": "1.0.0",
+  "description": "CLEANPLATE desktop — Tauri shell around the web workbench. Licence-key, offline.",
+  "scripts": {
+    "predev": "node sync-theme.mjs",
+    "dev": "tauri dev",
+    "prebuild": "node sync-theme.mjs && npm --prefix ../frontend run build",
+    "build": "tauri build",
+    "tauri": "tauri"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "2.1.0"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "2.1.1"
+  }
+}

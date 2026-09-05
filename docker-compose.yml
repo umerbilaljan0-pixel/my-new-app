@@ -1,0 +1,67 @@
+# CLEANPLATE — self-host the whole suite.
+#
+#   docker compose up --build          # engine + workbench + marketing site
+#   docker compose --profile hosted up  # + Postgres for the hosted flavour
+#
+# The engine (backend) runs the shared job queue. The workbench (frontend) is
+# served by nginx, which also proxies /api, /v1 and /ws to the engine, so the
+# app is reachable at http://localhost:5173 with no CORS setup.
+services:
+  backend:
+    build:
+      context: ./backend
+    environment:
+      - CLEANPLATE_HOME=/data
+      - CLEANPLATE_MAX_CONCURRENT=1
+      - CLEANPLATE_FLAVOUR=${CLEANPLATE_FLAVOUR:-local}
+      - CLEANPLATE_CORS_ORIGINS=http://localhost:5173,http://localhost:3000,tauri://localhost
+    volumes:
+      - cleanplate-data:/data          # persists model cache + job outputs
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+    # GPU: uncomment and build from the CUDA base (see backend/Dockerfile note)
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    depends_on:
+      - backend
+    ports:
+      - "5173:80"
+    restart: unless-stopped
+
+  site:
+    build:
+      context: .
+      dockerfile: site/Dockerfile
+    ports:
+      - "3000:80"
+    restart: unless-stopped
+
+  # Hosted flavour only: Postgres for accounts/billing. Enable with:
+  #   docker compose --profile hosted up
+  postgres:
+    image: postgres:16-alpine
+    profiles: ["hosted"]
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-cleanplate}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-cleanplate}
+      - POSTGRES_DB=${POSTGRES_DB:-cleanplate}
+    volumes:
+      - cleanplate-pg:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+
+volumes:
+  cleanplate-data:
+  cleanplate-pg:
