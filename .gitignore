@@ -37,3 +37,6 @@ Thumbs.db
 
 # stray API-client sample outputs
 out_*.png
+
+# desktop icons are generated (python desktop/gen-icons.py)
+desktop/src-tauri/icons/*.png
