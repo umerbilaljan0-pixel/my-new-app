@@ -1,9 +1,16 @@
 // Single WebSocket to the engine. Fans progress + status into the store.
+import { API_BASE } from "@/lib/api";
 import { useStore } from "@/state/store";
 
-export function connectWs(): () => void {
+function wsUrl(): string {
+  // Desktop build: API_BASE points at the local engine (http[s]→ws[s]).
+  if (API_BASE) return API_BASE.replace(/^http/, "ws") + "/ws";
   const proto = location.protocol === "https:" ? "wss" : "ws";
-  const url = `${proto}://${location.host}/ws`;
+  return `${proto}://${location.host}/ws`;
+}
+
+export function connectWs(): () => void {
+  const url = wsUrl();
   let ws: WebSocket | null = null;
   let closed = false;
   let retry = 0;

@@ -74,7 +74,11 @@ export interface ToolMeta {
   models: ModelSpec[];
 }
 
-const BASE = "";
+// Same-origin by default (web build behind the nginx proxy). The desktop build
+// loads from tauri://localhost, so it sets VITE_API_BASE to the local engine.
+export const API_BASE: string =
+  (import.meta.env.VITE_API_BASE as string | undefined) ?? "";
+const BASE = API_BASE;
 
 async function j<T>(res: Response): Promise<T> {
   if (!res.ok) {

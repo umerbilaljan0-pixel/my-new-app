@@ -3,11 +3,39 @@
 A native shell around the same web workbench (`../frontend`). Licence-key,
 offline — no account, nothing uploaded.
 
+> Verified: compiles with `tauri build` (Rust release, links libwebkit2gtk-4.1 /
+> libgtk-3 / libsoup-3.0), bundles a `.deb`, launches as a native window, and
+> connects to a local engine on `:8000` (the status bar shows the device).
+
+## Prerequisites
+
+- **Rust toolchain** (`rustup`).
+- **Node 18+**.
+- **Linux system libs** (Debian/Ubuntu):
+  ```bash
+  sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev \
+      libsoup-3.0-dev libjavascriptcoregtk-4.1-dev libayatana-appindicator3-dev
+  ```
+  macOS needs Xcode CLT; Windows needs the WebView2 runtime + MSVC build tools.
+- **Icons** (generated, not committed): `python gen-icons.py` (needs Pillow).
+
 ```bash
 npm install
-npm run tauri dev       # dev (spawns the frontend dev server; needs Rust toolchain)
-npm run tauri build     # installers per platform (.dmg / .exe / .AppImage / .deb)
+python gen-icons.py     # writes src-tauri/icons/*.png from the brand monogram
+npm run tauri dev       # dev — spawns the frontend dev server (proxy to :8000)
+npm run tauri build     # release binary + installers (.deb / .AppImage / .dmg / .exe)
+npm run tauri build -- --no-bundle   # just the binary, skip installers
 ```
+
+## Talking to the engine
+
+The packaged app loads from `tauri://localhost`, so it can't use same-origin
+`/api`. The build runs the frontend in **desktop mode**
+(`vite build --mode desktop`, see `beforeBuildCommand`), which sets
+`VITE_API_BASE=http://localhost:8000` (`../frontend/.env.desktop`). The web
+build keeps an empty base (same-origin, behind nginx). The CSP in
+`tauri.conf.json` already allows `connect-src http://localhost:8000` + its
+WebSocket.
 
 ## Theme from the shared tokens
 

@@ -40,3 +40,6 @@ out_*.png
 
 # desktop icons are generated (python desktop/gen-icons.py)
 desktop/src-tauri/icons/*.png
+
+# Tauri generated schemas (regenerated each build)
+desktop/src-tauri/gen/
