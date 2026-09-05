@@ -1,0 +1,22 @@
+/** Barrel export for the CLEANPLATE UI primitive library (Section 10). */
+export { Button, type ButtonProps, type ButtonVariant, type ButtonSize } from "./Button";
+export { IconButton, type IconButtonProps } from "./IconButton";
+export { Input, type InputProps } from "./Input";
+export { Textarea, type TextareaProps } from "./Textarea";
+export { Select, type SelectProps, type SelectOption } from "./Select";
+export { Checkbox, type CheckboxProps } from "./Checkbox";
+export { RadioGroup, type RadioGroupProps, type RadioOption } from "./RadioGroup";
+export { Toggle, type ToggleProps } from "./Toggle";
+export { Slider, type SliderProps } from "./Slider";
+export { Tabs, type TabsProps, type TabItem } from "./Tabs";
+export { Modal, type ModalProps } from "./Modal";
+export { Dropdown, type DropdownProps, type DropdownItem } from "./Dropdown";
+export { Tooltip, type TooltipProps } from "./Tooltip";
+export { ToastProvider, useToast, type ToastOptions, type ToastType } from "./Toast";
+export { Badge, type BadgeProps, type BadgeTone } from "./Badge";
+export { Pill, type PillProps } from "./Pill";
+export { Progress, type ProgressProps } from "./Progress";
+export { Skeleton, type SkeletonProps } from "./Skeleton";
+export { Spinner, type SpinnerProps } from "./Spinner";
+export { EmptyState, type EmptyStateProps } from "./EmptyState";
+export { ErrorState, type ErrorStateProps } from "./ErrorState";

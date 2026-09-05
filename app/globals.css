@@ -1,0 +1,162 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * globals.css carries base element styling and a few composed utilities.
+ * It contains NO raw colour values — every colour comes through a design token
+ * (via the var(--token) custom properties emitted from lib/design-tokens.ts).
+ */
+
+@layer base {
+  :root {
+    color-scheme: light;
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+    }
+  }
+
+  * {
+    border-color: rgb(var(--line));
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    background-color: rgb(var(--paper));
+    color: rgb(var(--ink));
+    font-family: theme("fontFamily.sans");
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Consistent, visible focus for keyboard users only (Section 3.6 / 3.8). */
+  :focus-visible {
+    outline: 2px solid rgb(var(--amber));
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+  :focus:not(:focus-visible) {
+    outline: none;
+  }
+
+  ::selection {
+    background-color: rgb(var(--cyan-tint));
+    color: rgb(var(--ink));
+  }
+
+  /* Every number in the product renders in the mono face (Section 3.3). */
+  .tabular {
+    font-family: theme("fontFamily.mono");
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.01em;
+  }
+}
+
+@layer components {
+  .container-page {
+    width: 100%;
+    max-width: theme("maxWidth.content");
+    margin-inline: auto;
+    padding-inline: theme("spacing.6");
+  }
+
+  /* The uppercase micro-label used for captions and field labels. */
+  .label-eyebrow {
+    font-size: theme("fontSize.2xs");
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: rgb(var(--ink-low));
+  }
+
+  .prose-measure {
+    max-width: theme("maxWidth.prose");
+  }
+
+  /* Checkerboard used behind transparent results (tool + gallery). */
+  .checkerboard {
+    background-image: linear-gradient(
+        45deg,
+        rgb(var(--sunken)) 25%,
+        transparent 25%
+      ),
+      linear-gradient(-45deg, rgb(var(--sunken)) 25%, transparent 25%),
+      linear-gradient(45deg, transparent 75%, rgb(var(--sunken)) 75%),
+      linear-gradient(-45deg, transparent 75%, rgb(var(--sunken)) 75%);
+    background-size: 16px 16px;
+    background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+    background-color: rgb(var(--surface));
+  }
+}
+
+@layer utilities {
+  /* Respect reduced-motion everywhere: disable transforms + long transitions. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.001ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.001ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+/* Range slider thumb (Section 3.6). Styled per-vendor; colour via tokens. */
+.cp-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 18px;
+  width: 18px;
+  border-radius: theme("borderRadius.pill");
+  background-color: rgb(var(--surface));
+  border: 2px solid rgb(var(--amber));
+  box-shadow: theme("boxShadow.hairline");
+  cursor: pointer;
+  transition: transform theme("transitionDuration.ui") theme("transitionTimingFunction.brand");
+}
+.cp-slider::-webkit-slider-thumb:active {
+  transform: scale(1.12);
+}
+.cp-slider::-moz-range-thumb {
+  height: 18px;
+  width: 18px;
+  border-radius: theme("borderRadius.pill");
+  background-color: rgb(var(--surface));
+  border: 2px solid rgb(var(--amber));
+  box-shadow: theme("boxShadow.hairline");
+  cursor: pointer;
+}
+.cp-slider:disabled::-webkit-slider-thumb,
+.cp-slider:disabled::-moz-range-thumb {
+  border-color: rgb(var(--line-strong));
+}
+
+/* Skip-to-content link (Section 3.8): visually hidden until focused. */
+.skip-link {
+  position: absolute;
+  left: theme("spacing.4");
+  top: theme("spacing.4");
+  z-index: 100;
+  transform: translateY(-200%);
+  transition: transform theme("transitionDuration.ui") theme("transitionTimingFunction.brand");
+  background-color: rgb(var(--surface));
+  color: rgb(var(--ink));
+  border: 1px solid rgb(var(--line-strong));
+  border-radius: theme("borderRadius.md");
+  padding: theme("spacing.2") theme("spacing.4");
+  box-shadow: theme("boxShadow.float");
+}
+.skip-link:focus {
+  transform: translateY(0);
+}
