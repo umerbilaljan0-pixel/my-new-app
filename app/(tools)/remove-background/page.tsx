@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { PhaseNotice } from "@/components/marketing/PhaseNotice";
-import { DropZone } from "@/components/tool/DropZone";
+import { Uploader } from "@/components/tool/Uploader";
 
 export const metadata: Metadata = {
   title: "Remove image background",
@@ -17,7 +17,7 @@ export default function RemoveBackgroundPage() {
       phase="Phase 3"
     >
       <div className="mx-auto max-w-[560px]">
-        <DropZone />
+        <Uploader />
       </div>
     </PhaseNotice>
   );

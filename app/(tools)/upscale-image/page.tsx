@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { PhaseNotice } from "@/components/marketing/PhaseNotice";
-import { DropZone } from "@/components/tool/DropZone";
+import { Uploader } from "@/components/tool/Uploader";
 
 export const metadata: Metadata = {
   title: "Upscale images to 4K",
@@ -17,7 +17,7 @@ export default function UpscaleImagePage() {
       phase="Phase 4"
     >
       <div className="mx-auto max-w-[560px]">
-        <DropZone />
+        <Uploader />
       </div>
     </PhaseNotice>
   );

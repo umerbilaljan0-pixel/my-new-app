@@ -3,10 +3,11 @@
 Three AI image tools — remove watermarks, remove backgrounds, upscale to 4K.
 Fast, honest, no-signup-to-try.
 
-> **Build status: Phase 1 (Foundation) complete.** This repository currently
-> contains the full front-end foundation — design system, component library,
-> theming, and marketing shell — with no backend yet. Subsequent phases (storage,
-> inference, accounts, billing) are outlined below and in the master spec.
+> **Build status: Phases 1–2 complete.** The front-end foundation (design
+> system, component library, theming, marketing shell) plus a working
+> **storage & upload pipeline** — client-side processing in a Web Worker and
+> direct-to-storage uploads with presigned URLs. Inference, accounts and billing
+> are outlined below and in the master spec.
 
 ---
 
@@ -39,14 +40,46 @@ foundation with **no backend**:
   tabs/modals/menus, skip-to-content link, `aria-live` toasts, reduced-motion
   support.
 
+## Phase 2 — Storage & upload
+
+The drop zone is now the real working tool. Dropping an image runs the full
+pipeline with no backend credentials required:
+
+- **Client-side processing in a Web Worker** (`lib/image/`) — decode, downscale
+  anything over 4096px on the long edge, **strip EXIF/GPS** (by re-encoding
+  through a canvas), and compute the SHA-256 — all off the main thread via
+  `OffscreenCanvas`, with a main-thread fallback. HEIC decodes where the browser
+  supports it; otherwise a clean, typed error.
+- **Presigned direct upload** (`app/api/upload`) — validates type + size, rate
+  limits (10/min, 60/hr, 200/day per IP+session), and issues a single-purpose,
+  5-minute presigned PUT URL. The browser uploads the bytes directly with **real
+  byte progress**, cancel, timeout and retry (`lib/upload/uploadClient.ts`).
+- **Pluggable storage adapter** (`lib/storage/`) — a one-file swap between
+  **Cloudflare R2** (production, via the S3 API) and a **local filesystem**
+  fallback (dev / no-credentials). The local backend's presigned URLs are
+  HMAC-signed, expiring and single-purpose, and enforce **server-side magic-byte
+  validation** on write (Section 14).
+- **Typed API boundary** — every request/response and the error envelope are
+  Zod schemas shared by client and server (`lib/validation/`); every error code
+  from Section 7.1 renders its Section 11.6 copy.
+
+Verified end-to-end in a real browser (Chromium): drop → worker resize/strip/
+hash → presign → upload → object lands in the `inputs` bucket, plus every error
+path (too large, unsupported, magic-byte rejection, expired/tampered signature).
+
 ### Demo
 
 ```bash
 pnpm install
 pnpm dev
-# open http://localhost:3000        → marketing home
+# open http://localhost:3000        → marketing home; drop an image and watch
+#                                      it process in-browser and upload (Phase 2)
 # open http://localhost:3000/gallery → component gallery (Phase 1 demo)
 ```
+
+With no `R2_*` env vars set, uploads use the local filesystem adapter (a temp
+directory) so the flow runs end-to-end with zero configuration. Set the `R2_*`
+vars in `.env` to switch to Cloudflare R2 — no code changes.
 
 ## Scripts
 
@@ -75,13 +108,22 @@ app/
   (tools)/            Erase / Cut Out / Upscale landing pages
   layout.tsx          Root: fonts, theme styles + no-FOUC script, providers
   globals.css         Base styles + composed utilities (no raw hex)
+  api/
+    upload/           Presigned-URL issuer (validate, rate limit, presign)
+    storage/[op]/     Local dev storage PUT/GET (production uses R2 directly)
 components/
   ui/                 The primitive component library
   layout/             Header, Footer, MobileNav, ThemeToggle, Wordmark, shell
   marketing/          Hero, ToolCard, HowItWorks, PriceCard, PhaseNotice
-  tool/               DropZone (upload target UI)
+  tool/               DropZone + Uploader (full drop→process→upload flow)
 lib/
   design-tokens.ts    SINGLE source of all visual constants
+  validation/         Zod schemas + error catalogue (shared client + server)
+  storage/            Storage adapter — R2 + local fallback, keys, magic bytes
+  image/              Client pipeline — worker, resize/EXIF-strip/hash
+  upload/             uploadClient — presign + progress + cancel + retry
+  ratelimit.ts        Fixed-window limiter (Upstash-ready)
+  security.ts         HMAC signing, IP hashing (server-only)
   nav.ts              Shared navigation data
   utils.ts            cn() class helper
 ```
@@ -91,8 +133,8 @@ lib/
 | Phase | Scope                                                                   | Status  |
 | ----- | ----------------------------------------------------------------------- | ------- |
 | 1     | Foundation — tokens, UI library, theming, layout, gallery               | ✅ Done |
-| 2     | Storage & upload — R2 presign, client resize/HEIC/EXIF/hash, real DropZone | Next    |
-| 3     | One tool end-to-end — DB, queue, worker, inference adapter, CUTOUT      | Planned |
+| 2     | Storage & upload — R2 presign, client resize/HEIC/EXIF/hash, real DropZone | ✅ Done |
+| 3     | One tool end-to-end — DB, queue, worker, inference adapter, CUTOUT      | Next    |
 | 4     | ERASE (mask editor) + UPLIFT (resolution targeting) + chaining         | Planned |
 | 5     | Accounts, credits ledger, Stripe checkout, HD download gate, dashboard | Planned |
 | 6     | Marketing & SEO — tool content, FAQ schema, blog, OG images, sitemap   | Planned |
