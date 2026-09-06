@@ -3,11 +3,11 @@
 Three AI image tools — remove watermarks, remove backgrounds, upscale to 4K.
 Fast, honest, no-signup-to-try.
 
-> **Build status: Phases 1–2 complete.** The front-end foundation (design
-> system, component library, theming, marketing shell) plus a working
-> **storage & upload pipeline** — client-side processing in a Web Worker and
-> direct-to-storage uploads with presigned URLs. Inference, accounts and billing
-> are outlined below and in the master spec.
+> **Build status: Phases 1–3 complete.** The front-end foundation, a working
+> **storage & upload pipeline**, and **one tool end-to-end** — CUTOUT
+> (background removal): job store, queue/worker, inference adapter, and the full
+> processing → before/after → free-download flow, no account required. Accounts
+> and billing are outlined below and in the master spec.
 
 ---
 
@@ -67,19 +67,51 @@ Verified end-to-end in a real browser (Chromium): drop → worker resize/strip/
 hash → presign → upload → object lands in the `inputs` bucket, plus every error
 path (too large, unsupported, magic-byte rejection, expired/tampered signature).
 
+## Phase 3 — CUTOUT end-to-end (background removal)
+
+The **/remove-background** page is a fully working tool with no account:
+
+- **Job model** (`lib/db/`) — a Drizzle/Postgres `jobs` schema (migration in
+  `lib/db/migrations/`) behind a `JobStore` interface, with a file-backed local
+  store so the app runs with no database. Content-addressed **cache**: an
+  identical input+params returns the finished job and charges nothing.
+- **Queue & worker** (`lib/jobs/`, `workers/`) — jobs dispatch in-process in dev
+  (runs with just `pnpm dev`); a standalone DB-polling worker (`pnpm worker`,
+  `INLINE_WORKER=false`) processes them in production, sharing one `processor`
+  with a 60s timeout and two retries.
+- **Inference adapter** (`lib/inference/`) — Replicate (production, a
+  BiRefNet/RMBG-class model) and a **real** sharp-based local background remover
+  (flood-fill from the borders) for dev / self-host. One-line provider swap.
+- **API** (`app/api/jobs`) — `POST /api/jobs` (cache → queue → dispatch),
+  `GET /api/jobs/:id` (status + free 1200px preview URL), and
+  `GET /api/jobs/:id/download?quality=preview|full` (302 to a signed URL; full
+  is credit-gated for Phase 5). Jobs are owned by the anonymous session.
+- **Result UI** — real processing state (Section 9.3), a draggable
+  keyboard-accessible before/after slider that auto-sweeps once, and a download
+  card with the free option always visible (Sections 9.4–9.5).
+- **24-hour cleanup** — `runCleanup()` purges expired jobs and their objects,
+  runnable via the worker cron or `POST /api/cron/cleanup`.
+
+Verified end-to-end in a real browser: drop a product shot → the background is
+removed → before/after slider → free PNG download. At the API level the full
+pipeline, the content-addressed cache, session ownership, HD gating, and the
+cleanup purge are all covered.
+
 ### Demo
 
 ```bash
 pnpm install
 pnpm dev
-# open http://localhost:3000        → marketing home; drop an image and watch
-#                                      it process in-browser and upload (Phase 2)
-# open http://localhost:3000/gallery → component gallery (Phase 1 demo)
+# open http://localhost:3000                 → marketing home (drop → upload)
+# open http://localhost:3000/remove-background → CUTOUT tool, end-to-end (Phase 3)
+# open http://localhost:3000/gallery          → component gallery (Phase 1 demo)
 ```
 
-With no `R2_*` env vars set, uploads use the local filesystem adapter (a temp
-directory) so the flow runs end-to-end with zero configuration. Set the `R2_*`
-vars in `.env` to switch to Cloudflare R2 — no code changes.
+With no `R2_*`, `DATABASE_URL` or `REPLICATE_API_TOKEN` set, the app uses the
+local storage adapter, a file-backed job store, and the built-in background
+remover — so the whole flow runs end-to-end with zero configuration. Set the
+`R2_*` / `DATABASE_URL` / `REPLICATE_*` env vars to switch each layer to its
+production backend, no code changes.
 
 ## Scripts
 
@@ -111,21 +143,28 @@ app/
   api/
     upload/           Presigned-URL issuer (validate, rate limit, presign)
     storage/[op]/     Local dev storage PUT/GET (production uses R2 directly)
+    jobs/             Create job, status, tier-gated download
+    cron/cleanup/     24-hour purge endpoint
 components/
   ui/                 The primitive component library
   layout/             Header, Footer, MobileNav, ThemeToggle, Wordmark, shell
   marketing/          Hero, ToolCard, HowItWorks, PriceCard, PhaseNotice
-  tool/               DropZone + Uploader (full drop→process→upload flow)
+  tool/               DropZone, Uploader, ToolRunner, BeforeAfterSlider, …
 lib/
   design-tokens.ts    SINGLE source of all visual constants
   validation/         Zod schemas + error catalogue (shared client + server)
   storage/            Storage adapter — R2 + local fallback, keys, magic bytes
   image/              Client pipeline — worker, resize/EXIF-strip/hash
   upload/             uploadClient — presign + progress + cancel + retry
+  db/                 Drizzle schema + migrations + JobStore (pg | local)
+  inference/          Inference adapter — Replicate + local bg remover
+  jobs/               processor, dispatch, cleanup, client poller
   ratelimit.ts        Fixed-window limiter (Upstash-ready)
   security.ts         HMAC signing, IP hashing (server-only)
   nav.ts              Shared navigation data
   utils.ts            cn() class helper
+workers/
+  job-runner.ts       Standalone queue worker + cleanup cron (production)
 ```
 
 ## Roadmap (from the master spec, Section 20)
@@ -134,8 +173,8 @@ lib/
 | ----- | ----------------------------------------------------------------------- | ------- |
 | 1     | Foundation — tokens, UI library, theming, layout, gallery               | ✅ Done |
 | 2     | Storage & upload — R2 presign, client resize/HEIC/EXIF/hash, real DropZone | ✅ Done |
-| 3     | One tool end-to-end — DB, queue, worker, inference adapter, CUTOUT      | Next    |
-| 4     | ERASE (mask editor) + UPLIFT (resolution targeting) + chaining         | Planned |
+| 3     | One tool end-to-end — DB, queue, worker, inference adapter, CUTOUT      | ✅ Done |
+| 4     | ERASE (mask editor) + UPLIFT (resolution targeting) + chaining         | Next    |
 | 5     | Accounts, credits ledger, Stripe checkout, HD download gate, dashboard | Planned |
 | 6     | Marketing & SEO — tool content, FAQ schema, blog, OG images, sitemap   | Planned |
 | 7     | Hardening — rate limits, abuse, Sentry, PostHog, cleanup cron, a11y/perf | Planned |

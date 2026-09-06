@@ -103,6 +103,39 @@ export function createR2Adapter(cfg: R2Config): StorageAdapter {
       }
     },
 
+    async get(bucket: StorageBucket, key: string): Promise<Uint8Array | null> {
+      const { client, s3 } = await getClient();
+      try {
+        const res = await client.send(
+          new s3.GetObjectCommand({ Bucket: bucketName(cfg, bucket), Key: key }),
+        );
+        const body = res.Body as { transformToByteArray?: () => Promise<Uint8Array> } | undefined;
+        if (body?.transformToByteArray) return await body.transformToByteArray();
+        return null;
+      } catch (err: unknown) {
+        const name = (err as { name?: string })?.name;
+        if (name === "NoSuchKey" || name === "NotFound") return null;
+        throw err;
+      }
+    },
+
+    async put(
+      bucket: StorageBucket,
+      key: string,
+      body: Uint8Array,
+      contentType: string,
+    ): Promise<void> {
+      const { client, s3 } = await getClient();
+      await client.send(
+        new s3.PutObjectCommand({
+          Bucket: bucketName(cfg, bucket),
+          Key: key,
+          Body: body,
+          ContentType: contentType,
+        }),
+      );
+    },
+
     async delete(bucket: StorageBucket, key: string): Promise<void> {
       const { client, s3 } = await getClient();
       await client.send(

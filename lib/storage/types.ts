@@ -42,6 +42,15 @@ export interface StorageAdapter {
   presignGet(input: PresignGetInput): Promise<PresignResult>;
   /** Existence + basic metadata, used to confirm an object landed. */
   head(bucket: StorageBucket, key: string): Promise<HeadResult>;
+  /** Server-side read of an object's bytes (used by the job processor). */
+  get(bucket: StorageBucket, key: string): Promise<Uint8Array | null>;
+  /** Server-side write of an object (used by the job processor). */
+  put(
+    bucket: StorageBucket,
+    key: string,
+    body: Uint8Array,
+    contentType: string,
+  ): Promise<void>;
   /** Permanently remove an object (24-hour cleanup, Section 13). */
   delete(bucket: StorageBucket, key: string): Promise<void>;
 }

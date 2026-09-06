@@ -21,3 +21,13 @@ export function extFor(contentType: string): string {
 export function inputKey(sha256: string, contentType: AcceptedMime | string): string {
   return `${sha256}.${extFor(contentType)}`;
 }
+
+/** Full-resolution result key within the `outputs` bucket. */
+export function outputKey(jobId: string): string {
+  return `${jobId}.png`;
+}
+
+/** Free-tier 1200px preview key within the `outputs` bucket. */
+export function previewKey(jobId: string): string {
+  return `${jobId}_1200.png`;
+}

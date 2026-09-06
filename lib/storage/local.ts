@@ -75,6 +75,19 @@ export function createLocalAdapter(): StorageAdapter {
       }
     },
 
+    async get(bucket: StorageBucket, key: string): Promise<Uint8Array | null> {
+      return readLocalObject(bucket, key);
+    },
+
+    async put(
+      bucket: StorageBucket,
+      key: string,
+      body: Uint8Array,
+      _contentType: string,
+    ): Promise<void> {
+      await writeLocalObject(bucket, key, body);
+    },
+
     async delete(bucket: StorageBucket, key: string): Promise<void> {
       await fs.rm(objectPath(bucket, key), { force: true });
     },
