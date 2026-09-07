@@ -6,6 +6,7 @@ import { getInference } from "@/lib/inference";
 import { jobStore } from "@/lib/db/store";
 import type { Job } from "@/lib/db/types";
 import { JOB_MAX_ATTEMPTS, JOB_TIMEOUT_MS, PREVIEW_LONG_EDGE } from "./config";
+import { UPLIFT_TARGETS } from "@/lib/validation/jobs";
 import type { ErrorCode } from "@/lib/validation/errors";
 
 /**
@@ -105,16 +106,22 @@ async function runToolOnce(job: Job): Promise<ToolResult> {
   const inputBytes = await storage.get("inputs", job.inputKey);
   if (!inputBytes) throw new Error(`input object missing: ${job.inputKey}`);
 
-  if (job.tool !== "cutout" || job.params.tool !== "cutout") {
-    throw new Error(`tool not implemented yet: ${job.tool}`); // ERASE/UPLIFT → Phase 4
-  }
-
   const inference = getInference();
-  const result = await inference.removeBackground({
-    bytes: inputBytes,
-    contentType: job.inputMime ?? "image/png",
-    params: job.params,
-  });
+  const contentType = job.inputMime ?? "image/png";
+  let result;
+
+  if (job.params.tool === "cutout") {
+    result = await inference.removeBackground({ bytes: inputBytes, contentType, params: job.params });
+  } else if (job.params.tool === "erase") {
+    const maskBytes = await storage.get("inputs", job.params.maskKey);
+    if (!maskBytes) throw new Error(`mask object missing: ${job.params.maskKey}`);
+    result = await inference.inpaint({ bytes: inputBytes, contentType, maskBytes, params: job.params });
+  } else if (job.params.tool === "uplift") {
+    const targetLongEdge = UPLIFT_TARGETS[job.params.target];
+    result = await inference.upscale({ bytes: inputBytes, contentType, targetLongEdge, params: job.params });
+  } else {
+    throw new Error(`tool not implemented: ${job.tool}`);
+  }
 
   const oKey = outputKey(job.id);
   await storage.put("outputs", oKey, result.bytes, result.contentType);

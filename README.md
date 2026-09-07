@@ -3,11 +3,11 @@
 Three AI image tools — remove watermarks, remove backgrounds, upscale to 4K.
 Fast, honest, no-signup-to-try.
 
-> **Build status: Phases 1–3 complete.** The front-end foundation, a working
-> **storage & upload pipeline**, and **one tool end-to-end** — CUTOUT
-> (background removal): job store, queue/worker, inference adapter, and the full
-> processing → before/after → free-download flow, no account required. Accounts
-> and billing are outlined below and in the master spec.
+> **Build status: Phases 1–4 complete.** The front-end foundation, the storage
+> & upload pipeline, and **all three tools working end-to-end** — CUTOUT
+> (background removal), ERASE (auto-detect + mask editor + inpainting) and UPLIFT
+> (resolution targeting) — plus **chaining** between them with no re-upload. No
+> account required. Accounts and billing are outlined below and in the spec.
 
 ---
 
@@ -97,14 +97,40 @@ removed → before/after slider → free PNG download. At the API level the full
 pipeline, the content-addressed cache, session ownership, HD gating, and the
 cleanup purge are all covered.
 
+## Phase 4 — ERASE, UPLIFT & chaining
+
+All three tools now run through one unified flow (`components/tool/ToolStudio`):
+
+- **ERASE** (`/remove-watermark`) — on upload, a real local-contrast / edge-energy
+  detector (`lib/inference/detect.ts`) proposes overlay boxes in cyan; the user
+  confirms ("Erase detected areas") or opens the **mask editor** (brush,
+  rectangle, eraser, undo/redo, clear, invert, `[`/`]` brush size). The mask is
+  dilated and inpainted; **only masked pixels change** — the rest is bit-identical.
+  Local inpainting is diffusion-based; production uses a LaMa-class model.
+- **UPLIFT** (`/upscale-image`) — pick an output resolution (1080p / 2K / 4K),
+  not a multiplier. The picker shows exact output dimensions, an estimate and the
+  credit cost, and greys out targets that would upscale beyond 4×. Local uses
+  Lanczos resampling; production uses a Real-ESRGAN-class model.
+- **Chaining** (Section 8.4) — every result offers the other two tools applied to
+  the current output with **zero re-upload**; the server promotes the prior
+  output into the inputs bucket (`fromJobId`).
+
+The inference adapter gained `inpaint` and `upscale` (both Replicate + local),
+and `POST /api/detect` runs detection. Verified end-to-end in Chromium (uplift
+picker → result; detect → erase → chain into upscale; mask editor draw → erase)
+and at the API level (erase changes only masked pixels; uplift/chain hit exact
+target dimensions; detection finds the overlay).
+
 ### Demo
 
 ```bash
 pnpm install
 pnpm dev
 # open http://localhost:3000                 → marketing home (drop → upload)
-# open http://localhost:3000/remove-background → CUTOUT tool, end-to-end (Phase 3)
-# open http://localhost:3000/gallery          → component gallery (Phase 1 demo)
+# open http://localhost:3000/remove-background → CUTOUT, end-to-end
+# open http://localhost:3000/remove-watermark  → ERASE (detect + mask editor)
+# open http://localhost:3000/upscale-image      → UPLIFT (resolution targeting)
+# open http://localhost:3000/gallery           → component gallery (Phase 1 demo)
 ```
 
 With no `R2_*`, `DATABASE_URL` or `REPLICATE_API_TOKEN` set, the app uses the
@@ -174,8 +200,8 @@ workers/
 | 1     | Foundation — tokens, UI library, theming, layout, gallery               | ✅ Done |
 | 2     | Storage & upload — R2 presign, client resize/HEIC/EXIF/hash, real DropZone | ✅ Done |
 | 3     | One tool end-to-end — DB, queue, worker, inference adapter, CUTOUT      | ✅ Done |
-| 4     | ERASE (mask editor) + UPLIFT (resolution targeting) + chaining         | Next    |
-| 5     | Accounts, credits ledger, Stripe checkout, HD download gate, dashboard | Planned |
+| 4     | ERASE (mask editor) + UPLIFT (resolution targeting) + chaining         | ✅ Done |
+| 5     | Accounts, credits ledger, Stripe checkout, HD download gate, dashboard | Next    |
 | 6     | Marketing & SEO — tool content, FAQ schema, blog, OG images, sitemap   | Planned |
 | 7     | Hardening — rate limits, abuse, Sentry, PostHog, cleanup cron, a11y/perf | Planned |
 | 8     | Batch mode, public API, API keys, Studio tier                          | Planned |

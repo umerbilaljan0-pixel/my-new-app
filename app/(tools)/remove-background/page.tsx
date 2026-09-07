@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { ToolRunner } from "@/components/tool/ToolRunner";
+import { ToolStudio } from "@/components/tool/ToolStudio";
 import { TRUST_LINE } from "@/lib/nav";
 
 export const metadata: Metadata = {
@@ -21,12 +21,8 @@ export default function RemoveBackgroundPage() {
           product shots and clear subjects. No account, results in seconds.
         </p>
       </div>
-
       <div className="mx-auto mt-10 max-w-[640px]">
-        <ToolRunner
-          params={{ tool: "cutout", background: "transparent", feather: 0 }}
-          processingStages={["Analysing image", "Isolating subject", "Refining edges", "Finishing"]}
-        />
+        <ToolStudio initialTool="cutout" />
         <p className="mt-4 text-center text-2xs text-ink-low">{TRUST_LINE}</p>
       </div>
     </div>

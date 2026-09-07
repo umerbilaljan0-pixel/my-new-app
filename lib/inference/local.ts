@@ -1,6 +1,12 @@
 import "server-only";
 import sharp from "sharp";
-import type { CutoutInput, InferenceAdapter, InferenceResult } from "./types";
+import type {
+  CutoutInput,
+  EraseInput,
+  InferenceAdapter,
+  InferenceResult,
+  UpscaleInput,
+} from "./types";
 
 /**
  * Local background-removal adapter — the no-credential dev/self-host fallback
@@ -55,6 +61,41 @@ function blurAlpha(alpha: Uint8Array, w: number, h: number, r: number): Uint8Arr
       const add = Math.min(h - 1, y + r + 1) * w + x;
       const sub = Math.max(0, y - r) * w + x;
       sum += tmp[add]! - tmp[sub]!;
+    }
+  }
+  return out;
+}
+
+/** Separable Chebyshev max-filter — a morphological dilation of a 0/255 mask. */
+function dilateMask(mask: Uint8Array, w: number, h: number, r: number): Uint8Array {
+  if (r <= 0) return mask;
+  const tmp = new Uint8Array(mask.length);
+  for (let y = 0; y < h; y++) {
+    const row = y * w;
+    for (let x = 0; x < w; x++) {
+      let m = 0;
+      for (let k = -r; k <= r; k++) {
+        const xx = x + k;
+        if (xx >= 0 && xx < w && mask[row + xx]) {
+          m = 255;
+          break;
+        }
+      }
+      tmp[row + x] = m;
+    }
+  }
+  const out = new Uint8Array(mask.length);
+  for (let x = 0; x < w; x++) {
+    for (let y = 0; y < h; y++) {
+      let m = 0;
+      for (let k = -r; k <= r; k++) {
+        const yy = y + k;
+        if (yy >= 0 && yy < h && tmp[yy * w + x]) {
+          m = 255;
+          break;
+        }
+      }
+      out[y * w + x] = m;
     }
   }
   return out;
@@ -158,6 +199,110 @@ export function createLocalInference(): InferenceAdapter {
         width: w,
         height: h,
       };
+    },
+
+    async inpaint(input: EraseInput): Promise<InferenceResult> {
+      // Decode the input and the mask at the input's exact dimensions.
+      const base = sharp(Buffer.from(input.bytes)).ensureAlpha();
+      const { data, info } = await base.raw().toBuffer({ resolveWithObject: true });
+      const w = info.width;
+      const h = info.height;
+      const px = w * h;
+
+      const maskRaw = await sharp(Buffer.from(input.maskBytes))
+        .resize(w, h, { fit: "fill" })
+        .greyscale()
+        .raw()
+        .toBuffer();
+      let mask = new Uint8Array(px);
+      for (let p = 0; p < px; p++) mask[p] = maskRaw[p]! > 127 ? 255 : 0;
+
+      // Dilate — painting slightly past the edge avoids halos (Section 8.1).
+      mask = dilateMask(mask, w, h, input.params.dilate);
+
+      // Collect masked pixels and their bounding box.
+      const masked: number[] = [];
+      let minX = w, minY = h, maxX = 0, maxY = 0, meanR = 0, meanG = 0, meanB = 0, nBg = 0;
+      const out = Buffer.from(data);
+      for (let p = 0; p < px; p++) {
+        if (mask[p]) {
+          masked.push(p);
+          const x = p % w;
+          const y = (p - x) / w;
+          if (x < minX) minX = x;
+          if (x > maxX) maxX = x;
+          if (y < minY) minY = y;
+          if (y > maxY) maxY = y;
+        } else {
+          meanR += out[p * 4]!;
+          meanG += out[p * 4 + 1]!;
+          meanB += out[p * 4 + 2]!;
+          nBg++;
+        }
+      }
+
+      if (masked.length > 0 && nBg > 0) {
+        // Seed the hole with the surrounding mean, then diffuse (Gauss–Seidel).
+        const sr = Math.round(meanR / nBg);
+        const sg = Math.round(meanG / nBg);
+        const sb = Math.round(meanB / nBg);
+        for (const p of masked) {
+          out[p * 4] = sr;
+          out[p * 4 + 1] = sg;
+          out[p * 4 + 2] = sb;
+        }
+        const holeDim = Math.max(maxX - minX, maxY - minY) + 1;
+        const iterations = Math.min(
+          input.params.generativeFill ? 500 : 250,
+          Math.max(30, holeDim),
+        );
+        for (let it = 0; it < iterations; it++) {
+          for (const p of masked) {
+            const x = p % w;
+            const y = (p - x) / w;
+            let r = 0, g = 0, b = 0, c = 0;
+            if (x > 0) { const i = (p - 1) * 4; r += out[i]!; g += out[i + 1]!; b += out[i + 2]!; c++; }
+            if (x < w - 1) { const i = (p + 1) * 4; r += out[i]!; g += out[i + 1]!; b += out[i + 2]!; c++; }
+            if (y > 0) { const i = (p - w) * 4; r += out[i]!; g += out[i + 1]!; b += out[i + 2]!; c++; }
+            if (y < h - 1) { const i = (p + w) * 4; r += out[i]!; g += out[i + 1]!; b += out[i + 2]!; c++; }
+            if (c > 0) {
+              const i = p * 4;
+              out[i] = Math.round(r / c);
+              out[i + 1] = Math.round(g / c);
+              out[i + 2] = Math.round(b / c);
+            }
+          }
+        }
+      }
+
+      // Only masked pixels changed; untouched pixels are bit-identical.
+      const pngBuf = await sharp(out, { raw: { width: w, height: h, channels: 4 } })
+        .png()
+        .toBuffer();
+      return { bytes: new Uint8Array(pngBuf), contentType: "image/png", width: w, height: h };
+    },
+
+    async upscale(input: UpscaleInput): Promise<InferenceResult> {
+      const meta = await sharp(Buffer.from(input.bytes)).metadata();
+      const sw = meta.width ?? 0;
+      const sh = meta.height ?? 0;
+      const longEdge = Math.max(sw, sh) || 1;
+      const scale = input.targetLongEdge / longEdge;
+      const outW = Math.max(1, Math.round(sw * scale));
+      const outH = Math.max(1, Math.round(sh * scale));
+
+      let pipe = sharp(Buffer.from(input.bytes)).resize(outW, outH, {
+        kernel: "lanczos3",
+        fit: "fill",
+      });
+      if (input.params.denoise > 0) {
+        pipe = pipe.median(input.params.denoise > 50 ? 3 : 1);
+      }
+      if (input.params.sharpen > 0) {
+        pipe = pipe.sharpen({ sigma: 0.5 + (input.params.sharpen / 100) * 1.5 });
+      }
+      const pngBuf = await pipe.png().toBuffer();
+      return { bytes: new Uint8Array(pngBuf), contentType: "image/png", width: outW, height: outH };
     },
   };
 }

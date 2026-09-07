@@ -1,4 +1,5 @@
 import { type NextRequest } from "next/server";
+import { createHash } from "node:crypto";
 import { errorResponse, jsonResponse } from "@/lib/api/respond";
 import { getStorage } from "@/lib/storage";
 import { getSession, setSessionCookie } from "@/lib/session";
@@ -22,10 +23,18 @@ function mimeFromKey(key: string): string {
   return "image/png";
 }
 
+interface Source {
+  inputKey: string;
+  inputHash: string;
+  inputWidth: number | null;
+  inputHeight: number | null;
+  inputMime: string;
+}
+
 /**
- * POST /api/jobs — create a job (Section 7.2). Checks the content-addressed
- * cache first (returns a done job, charges nothing); otherwise inserts a queued
- * job and dispatches it. Never blocks on inference.
+ * POST /api/jobs — create a job (Sections 7.2 / 8.4). Resolves the input from a
+ * fresh upload or, when chaining, from a previous job's output (promoted into
+ * the inputs bucket). Checks the content-addressed cache, then queues.
  */
 export async function POST(req: NextRequest) {
   let raw: unknown;
@@ -42,8 +51,6 @@ export async function POST(req: NextRequest) {
   const body = parsed.data;
   const tool = body.params.tool;
 
-  // Basic abuse limit (the 3-free-per-day freemium rule lands with credits in
-  // Phase 5). 20 job creations/min per IP+session.
   const ip = clientIpFromHeaders(req.headers);
   const { id: sid, isNew } = getSession(req);
   const rl = limit(`jobs:${hashIp(ip)}:${sid}`, 20, 60);
@@ -55,19 +62,58 @@ export async function POST(req: NextRequest) {
   }
 
   const storage = getStorage();
-  const head = await storage.head("inputs", body.inputKey);
-  if (!head.exists) {
-    return errorResponse("UPLOAD_FAILED", {
-      message: "We can't find that upload. Try uploading the image again.",
-    });
+  const store = await jobStore();
+
+  // Resolve the input source: a fresh upload, or a prior job's output (chaining).
+  let source: Source;
+  if (body.fromJobId) {
+    const prior = await store.getById(body.fromJobId);
+    if (!prior || (prior.sessionId && prior.sessionId !== sid)) {
+      return errorResponse("JOB_NOT_FOUND");
+    }
+    if (prior.status !== "done" || !prior.outputKey) {
+      return errorResponse("JOB_NOT_FOUND", { message: "That result isn't ready to chain from." });
+    }
+    const bytes = await storage.get("outputs", prior.outputKey);
+    if (!bytes) return errorResponse("JOB_NOT_FOUND", { message: "That result has expired." });
+    const sha = createHash("sha256").update(bytes).digest("hex");
+    const key = `${sha}.png`;
+    await storage.put("inputs", key, bytes, "image/png");
+    source = {
+      inputKey: key,
+      inputHash: sha,
+      inputWidth: prior.outputWidth,
+      inputHeight: prior.outputHeight,
+      inputMime: "image/png",
+    };
+  } else {
+    const head = await storage.head("inputs", body.inputKey!);
+    if (!head.exists) {
+      return errorResponse("UPLOAD_FAILED", {
+        message: "We can't find that upload. Try uploading the image again.",
+      });
+    }
+    source = {
+      inputKey: body.inputKey!,
+      inputHash: body.inputHash!,
+      inputWidth: body.inputWidth ?? null,
+      inputHeight: body.inputHeight ?? null,
+      inputMime: mimeFromKey(body.inputKey!),
+    };
   }
 
-  const store = await jobStore();
+  // ERASE needs its mask object present.
+  if (body.params.tool === "erase") {
+    const maskHead = await storage.head("inputs", body.params.maskKey);
+    if (!maskHead.exists) {
+      return errorResponse("UPLOAD_FAILED", { message: "The mask didn't upload. Try again." });
+    }
+  }
+
   const pHash = computeParamsHash(body.params);
   const expiresAt = new Date(Date.now() + OBJECT_TTL_HOURS * 3600_000).toISOString();
 
-  // Cache lookup — content-addressed reuse, charge nothing (Section 7.2).
-  const cached = await store.findCached(body.inputHash, tool, pHash);
+  const cached = await store.findCached(source.inputHash, tool, pHash);
   if (cached) {
     const job = await store.create({
       userId: null,
@@ -75,10 +121,10 @@ export async function POST(req: NextRequest) {
       tool,
       params: body.params,
       paramsHash: pHash,
-      inputKey: body.inputKey,
-      inputHash: body.inputHash,
-      inputWidth: body.inputWidth ?? cached.inputWidth,
-      inputHeight: body.inputHeight ?? cached.inputHeight,
+      inputKey: source.inputKey,
+      inputHash: source.inputHash,
+      inputWidth: source.inputWidth,
+      inputHeight: source.inputHeight,
       status: "done",
       outputKey: cached.outputKey,
       outputWidth: cached.outputWidth,
@@ -100,15 +146,14 @@ export async function POST(req: NextRequest) {
     tool,
     params: body.params,
     paramsHash: pHash,
-    inputKey: body.inputKey,
-    inputHash: body.inputHash,
-    inputWidth: body.inputWidth ?? null,
-    inputHeight: body.inputHeight ?? null,
+    inputKey: source.inputKey,
+    inputHash: source.inputHash,
+    inputWidth: source.inputWidth,
+    inputHeight: source.inputHeight,
     status: "queued",
     expiresAt,
   });
-  // Record the input mime so the processor hands the right type to inference.
-  await store.update(job.id, { inputMime: mimeFromKey(body.inputKey) });
+  await store.update(job.id, { inputMime: source.inputMime });
 
   dispatch(job.id);
 

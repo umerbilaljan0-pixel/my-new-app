@@ -17,6 +17,8 @@ export function getInference(): InferenceAdapter {
     cached = createReplicateInference({
       apiToken: token,
       cutoutVersion: process.env.REPLICATE_CUTOUT_VERSION,
+      eraseVersion: process.env.REPLICATE_ERASE_VERSION,
+      upscaleVersion: process.env.REPLICATE_UPSCALE_VERSION,
     });
   } else {
     if (!warned) {

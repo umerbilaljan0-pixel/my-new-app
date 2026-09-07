@@ -154,6 +154,48 @@ async function requestPresign(
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+async function sha256Hex(buf: ArrayBuffer): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", buf);
+  return Array.from(new Uint8Array(digest))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+/**
+ * Upload a Blob (e.g. an ERASE mask PNG) directly, bypassing the image-resize
+ * pipeline so exact dimensions are preserved. Returns the stored key.
+ */
+export async function uploadBlob(
+  blob: Blob,
+  filename: string,
+): Promise<{ key: string; sha256: string }> {
+  const buf = await blob.arrayBuffer();
+  const sha = await sha256Hex(buf);
+  const contentType = blob.type || "image/png";
+
+  const res = await fetch("/api/upload", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ filename, contentType, bytes: blob.size, sha256: sha }),
+  });
+  const json = await res.json().catch(() => null);
+  if (!res.ok) {
+    const parsed = errorEnvelopeSchema.safeParse(json);
+    if (parsed.success) throw new UploadError(parsed.data.error.code, parsed.data.error.message, parsed.data.error.retryable);
+    throw new UploadError("UPLOAD_FAILED", "Couldn't start the upload.", true);
+  }
+  const ok = uploadResponseSchema.safeParse(json);
+  if (!ok.success) throw new UploadError("UPLOAD_FAILED", "Unexpected upload response.", true);
+
+  const put = await fetch(ok.data.uploadUrl, {
+    method: "PUT",
+    headers: { "Content-Type": contentType },
+    body: blob,
+  });
+  if (!put.ok) throw new UploadError("UPLOAD_FAILED", "The upload didn't finish. Try again.", true);
+  return { key: ok.data.key, sha256: sha };
+}
+
 export function startUpload(
   file: File,
   callbacks: UploadCallbacks = {},

@@ -3,9 +3,11 @@
 import {
   createJobResponseSchema,
   jobStatusResponseSchema,
+  detectResponseSchema,
   type CreateJobRequest,
   type CreateJobResponse,
   type JobStatusResponse,
+  type DetectBox,
 } from "@/lib/validation/jobs";
 import { errorEnvelopeSchema } from "@/lib/validation/errors";
 
@@ -28,6 +30,23 @@ async function parseError(res: Response): Promise<JobError> {
     return new JobError(e.code, e.message, e.retryable);
   }
   return new JobError("INTERNAL", "Something went wrong. Try again.", true);
+}
+
+/** Run ERASE auto-detection; returns candidate boxes (best-effort, never throws
+ * fatally — an empty list just means "draw it yourself"). */
+export async function detectOverlays(inputKey: string): Promise<DetectBox[]> {
+  try {
+    const res = await fetch("/api/detect", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ inputKey }),
+    });
+    if (!res.ok) return [];
+    const parsed = detectResponseSchema.safeParse(await res.json());
+    return parsed.success ? parsed.data.boxes : [];
+  } catch {
+    return [];
+  }
 }
 
 export async function createJob(req: CreateJobRequest): Promise<CreateJobResponse> {
