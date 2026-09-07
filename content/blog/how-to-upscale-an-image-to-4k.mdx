@@ -1,0 +1,40 @@
+---
+title: How to upscale an image to 4K (and when not to)
+description: Upscaling can rescue a small image — or waste your time. Here's how to pick the right target resolution and what to expect from the result.
+date: 2026-08-06
+tags: [uplift, how-to]
+---
+
+"Make it 4K" is easy to ask for and easy to get wrong. The trick is matching the
+target to what your source can actually support.
+
+## Targets, not multipliers
+
+CLEANPLATE's [Upscale tool](/upscale-image) asks for an output **resolution** —
+1080p, 2K or 4K — not a vague "×4". You shouldn't have to know your source's pixel
+count to make a good choice. Pick the size you need; the tool works out the scale,
+runs it, and resamples to the exact dimensions while preserving your aspect ratio.
+
+## The 4× rule
+
+A target is greyed out when it would enlarge the source more than 4×. Past that,
+you're inventing far more pixels than you started with, and it shows. For a small
+image, **2K is often the honest best result** — the note under the greyed-out 4K
+option tells you so.
+
+## What upscaling can and can't do
+
+- **Can:** sharpen soft detail, smooth jagged edges, make a small image usable at
+  a larger size.
+- **Can't:** recover detail that was never captured. If text is an unreadable
+  smudge in the source, upscaling makes a *sharper* smudge, not readable text.
+
+## Don't over-sharpen
+
+Sharpening is off by default, on purpose — cranked sharpening looks cheap and
+crunchy. Add a little if an image is soft; leave it at zero if it's already crisp.
+
+## Chain it
+
+Removed a background and now need it bigger? Send the cut-out straight into
+Upscale — no re-upload. The result of one tool becomes the input to the next.

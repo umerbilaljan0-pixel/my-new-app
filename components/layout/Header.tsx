@@ -2,30 +2,21 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ChevronDown, Menu, Coins } from "lucide-react";
+import { ChevronDown, Menu } from "lucide-react";
 import { PRIMARY_NAV, TOOLS } from "@/lib/nav";
-import { Button } from "@/components/ui/Button";
 import { IconButton } from "@/components/ui/IconButton";
 import { Dropdown } from "@/components/ui/Dropdown";
-import { Pill } from "@/components/ui/Pill";
 import { Wordmark } from "./Wordmark";
 import { ThemeToggle } from "./ThemeToggle";
 import { MobileNav } from "./MobileNav";
-
-export interface HeaderProps {
-  /**
-   * Signed-in credit balance. When provided the balance pill is shown in place
-   * of the "Sign in" affordance treatment. (Wired to real data in Phase 5.)
-   */
-  credits?: number;
-}
+import { AuthNav } from "./AuthNav";
 
 /**
  * Header — sticky 64px bar (Section 4). Wordmark left; Tools dropdown + primary
- * links centre; theme toggle, credit pill and CTA right. Collapses to a
+ * links centre; theme toggle and account controls right. Collapses to a
  * hamburger sheet under lg.
  */
-export function Header({ credits }: HeaderProps) {
+export function Header() {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   return (
@@ -70,21 +61,7 @@ export function Header({ credits }: HeaderProps) {
 
         <div className="flex items-center gap-2">
           <ThemeToggle />
-          {typeof credits === "number" && (
-            <Link href="/app/billing" className="hidden rounded-pill sm:inline-flex">
-              <Pill tone="amber" icon={<Coins size={13} />}>
-                <span className="tabular">{credits}</span>
-              </Pill>
-            </Link>
-          )}
-          <div className="hidden items-center gap-2 lg:flex">
-            <Button variant="ghost" size="sm">
-              Sign in
-            </Button>
-            <Button variant="primary" size="sm">
-              Upgrade
-            </Button>
-          </div>
+          <AuthNav />
           <div className="lg:hidden">
             <IconButton
               aria-label="Open menu"

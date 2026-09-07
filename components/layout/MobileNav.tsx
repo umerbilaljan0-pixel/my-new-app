@@ -4,8 +4,8 @@ import { useEffect } from "react";
 import Link from "next/link";
 import { X } from "lucide-react";
 import { PRIMARY_NAV, TOOLS } from "@/lib/nav";
-import { Button } from "@/components/ui/Button";
 import { IconButton } from "@/components/ui/IconButton";
+import { useAuth } from "@/components/auth/AuthProvider";
 import { Wordmark } from "./Wordmark";
 
 export interface MobileNavProps {
@@ -69,15 +69,34 @@ export function MobileNav({ open, onClose }: MobileNavProps) {
             </Link>
           ))}
         </nav>
-        <div className="flex flex-col gap-2 border-t border-line p-4">
-          <Button variant="secondary" fullWidth>
-            Sign in
-          </Button>
-          <Button variant="primary" fullWidth>
-            Upgrade
-          </Button>
-        </div>
+        <MobileAuth onClose={onClose} />
       </div>
+    </div>
+  );
+}
+
+function MobileAuth({ onClose }: { onClose: () => void }) {
+  const { user } = useAuth();
+  const secondary =
+    "inline-flex h-11 w-full items-center justify-center rounded-md border border-line bg-surface px-5 text-sm font-semibold text-ink transition-colors hover:border-line-strong hover:bg-sunken";
+  const primary =
+    "inline-flex h-11 w-full items-center justify-center rounded-md bg-amber px-5 text-sm font-semibold text-white transition-colors hover:bg-amber-press active:scale-[0.98]";
+  return (
+    <div className="flex flex-col gap-2 border-t border-line p-4">
+      {user ? (
+        <Link href="/app" onClick={onClose} className={secondary}>
+          Dashboard · {user.credits} credits
+        </Link>
+      ) : (
+        <>
+          <Link href="/login" onClick={onClose} className={secondary}>
+            Sign in
+          </Link>
+          <Link href="/pricing" onClick={onClose} className={primary}>
+            Upgrade
+          </Link>
+        </>
+      )}
     </div>
   );
 }

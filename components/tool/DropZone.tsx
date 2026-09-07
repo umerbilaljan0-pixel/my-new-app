@@ -9,32 +9,20 @@ import {
 } from "react";
 import { UploadCloud } from "lucide-react";
 import { cn } from "@/lib/utils";
-
-/** Accepted input types (Section 9.1). */
-export const ACCEPTED_MIME = [
-  "image/png",
-  "image/jpeg",
-  "image/webp",
-  "image/heic",
-  "image/heif",
-] as const;
-
-export const MAX_BYTES = 25 * 1024 * 1024; // 25MB
+import {
+  ACCEPTED_MIME,
+  MAX_BYTES,
+  isAcceptedFile,
+} from "@/lib/validation/upload";
 
 export interface DropZoneProps {
-  /**
-   * Called with an accepted File. In Phase 1 the home page uses this to show a
-   * local preview; Phase 2 wires it to the real upload pipeline (resize / HEIC /
-   * EXIF strip / hash / presigned PUT).
-   */
+  /** Called with an accepted File — the Uploader wires this to the pipeline. */
   onFile?: (file: File) => void;
   className?: string;
 }
 
 function isAccepted(file: File): boolean {
-  // HEIC files sometimes arrive with an empty MIME type; fall back to extension.
-  if ((ACCEPTED_MIME as readonly string[]).includes(file.type)) return true;
-  return /\.(png|jpe?g|webp|heic|heif)$/i.test(file.name);
+  return isAcceptedFile(file.name, file.type);
 }
 
 /**
