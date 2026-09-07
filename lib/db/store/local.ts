@@ -126,6 +126,13 @@ export function createLocalJobStore(): JobStore {
       return next;
     },
 
+    async listByUser(userId: string, limit = 50): Promise<Job[]> {
+      return Object.values(read().jobs)
+        .filter((j) => j.userId === userId)
+        .sort((a, b) => b.queuedAt.localeCompare(a.queuedAt))
+        .slice(0, limit);
+    },
+
     async listExpired(now: Date): Promise<Job[]> {
       const db = read();
       return Object.values(db.jobs).filter(

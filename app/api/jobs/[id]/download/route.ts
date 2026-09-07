@@ -2,17 +2,20 @@ import { type NextRequest, NextResponse } from "next/server";
 import { errorResponse } from "@/lib/api/respond";
 import { getStorage } from "@/lib/storage";
 import { getSession } from "@/lib/session";
+import { getSessionUser } from "@/lib/auth/session";
 import { jobStore } from "@/lib/db/store";
+import { chargeCredits, hdCostForJob } from "@/lib/credits";
 
 export const runtime = "nodejs";
 
 /**
  * GET /api/jobs/:id/download?quality=preview|full — 302 to a short-lived signed
- * URL (Section 7.2).
+ * URL (Sections 7.2 / 12).
  *
- * - preview: the free 1200px result, always available.
- * - full: entitlement-gated. Credits arrive in Phase 5; until then full returns
- *   NO_CREDITS so the free path works end-to-end and the HD path is honest.
+ * - preview: the free 1200px result, always available to the owner.
+ * - full: requires sign-in and credits. The credit is charged here, once per
+ *   job (re-downloads are free); a failed job never reaches this point so is
+ *   never charged.
  */
 export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
@@ -22,23 +25,43 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
   const job = await store.getById(id);
   if (!job) return errorResponse("JOB_NOT_FOUND");
 
-  const { id: sid } = getSession(req);
-  if (job.sessionId && job.sessionId !== sid) return errorResponse("JOB_NOT_FOUND");
+  const anon = getSession(req);
+  const user = getSessionUser(req);
+  const ownsAnon = job.sessionId && job.sessionId === anon.id;
+  const ownsUser = job.userId && user && job.userId === user.userId;
+  if (!ownsAnon && !ownsUser) return errorResponse("JOB_NOT_FOUND");
 
   if (job.status !== "done") {
     return errorResponse("JOB_NOT_FOUND", { message: "That result isn't ready yet." });
   }
 
+  const storage = getStorage();
+
   if (quality === "full") {
-    // Entitlement + credit charge at download time (Section 12) lands in Phase 5.
-    return errorResponse("NO_CREDITS");
+    if (!user) return errorResponse("UNAUTHORIZED", { message: "Sign in to download full resolution." });
+    if (!job.outputKey) return errorResponse("JOB_NOT_FOUND", { message: "No full-resolution output." });
+
+    // Charge once per job. creditsCharged>0 means this job is already unlocked.
+    if (!job.creditsCharged || job.creditsCharged <= 0) {
+      const cost = hdCostForJob(job);
+      try {
+        await chargeCredits(user.userId, cost, job.id);
+      } catch (err) {
+        if (err instanceof Error && err.message === "INSUFFICIENT_CREDITS") {
+          return errorResponse("NO_CREDITS");
+        }
+        throw err;
+      }
+      await store.update(job.id, { creditsCharged: cost });
+    }
+
+    const { url } = await storage.presignGet({ bucket: "outputs", key: job.outputKey });
+    const absolute = url.startsWith("http") ? url : new URL(url, req.nextUrl.origin).toString();
+    return NextResponse.redirect(absolute, 302);
   }
 
   if (!job.previewKey) return errorResponse("JOB_NOT_FOUND", { message: "No preview available." });
-
-  const storage = getStorage();
   const { url } = await storage.presignGet({ bucket: "outputs", key: job.previewKey });
-  // Resolve relative (local dev) URLs against the request origin for the 302.
   const absolute = url.startsWith("http") ? url : new URL(url, req.nextUrl.origin).toString();
   return NextResponse.redirect(absolute, 302);
 }

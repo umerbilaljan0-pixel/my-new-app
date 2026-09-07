@@ -173,6 +173,16 @@ export async function createPostgresJobStore(databaseUrl: string): Promise<JobSt
       return row ? rowToJob(row) : null;
     },
 
+    async listByUser(userId: string, limit = 50): Promise<Job[]> {
+      const rows = await db
+        .select()
+        .from(jobs)
+        .where(eq(jobs.userId, userId))
+        .orderBy(desc(jobs.queuedAt))
+        .limit(limit);
+      return (rows as Record<string, unknown>[]).map(rowToJob);
+    },
+
     async listExpired(now: Date): Promise<Job[]> {
       const rows = await db.select().from(jobs).where(lte(jobs.expiresAt, now));
       return (rows as Record<string, unknown>[]).map(rowToJob);

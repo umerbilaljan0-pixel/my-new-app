@@ -72,6 +72,33 @@ export function ToolStudio({ initialTool }: ToolStudioProps) {
     };
   }, []);
 
+  // Session restore (Section 9.5): returning from checkout with ?restore=<jobId>
+  // reopens that exact result so the HD download is unlocked.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const restoreId = params.get("restore");
+    if (!restoreId) return;
+    params.delete("restore");
+    params.delete("purchase");
+    const qs = params.toString();
+    window.history.replaceState(null, "", window.location.pathname + (qs ? `?${qs}` : ""));
+    (async () => {
+      try {
+        const done = await pollJob(restoreId, { timeoutMs: 8000 });
+        if (done.previewUrl) {
+          setTool(done.tool);
+          setDisplayUrl(done.previewUrl);
+          setResult({ jobId: restoreId, previewUrl: done.previewUrl, width: done.meta?.width, height: done.meta?.height, bytes: done.meta?.bytes });
+          setPhase("result");
+        }
+      } catch {
+        /* restore is best-effort */
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const fail = useCallback((err: unknown) => {
     if ((err instanceof UploadError || err instanceof JobError) && err.code === "CANCELLED") return;
     const info: ErrInfo =

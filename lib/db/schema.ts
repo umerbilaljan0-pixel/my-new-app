@@ -9,6 +9,50 @@ import {
 } from "drizzle-orm/pg-core";
 
 /**
+ * users (Section 6). Accounts created on first sign-in (Google or dev login).
+ * `credits` is a cache of the credit_ledger balance — the ledger is the truth.
+ */
+export const users = pgTable("users", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  email: text("email").notNull().unique(),
+  name: text("name"),
+  avatarUrl: text("avatar_url"),
+  authProvider: text("auth_provider"), // google | dev
+  credits: integer("credits").notNull().default(0),
+  plan: text("plan").notNull().default("free"), // free | starter | pro | studio
+  stripeCustomerId: text("stripe_customer_id"),
+  stripeSubscriptionId: text("stripe_subscription_id"),
+  planRenewsAt: timestamp("plan_renews_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).defaultNow(),
+});
+
+/**
+ * credit_ledger (Section 6). Every credit change is a row; the balance is only
+ * ever mutated inside the same transaction that appends the row.
+ */
+export const creditLedger = pgTable(
+  "credit_ledger",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id").notNull(),
+    delta: integer("delta").notNull(),
+    reason: text("reason").notNull(), // purchase|subscription_grant|job_charge|refund|promo
+    jobId: uuid("job_id"),
+    stripePaymentIntent: text("stripe_payment_intent"),
+    balanceAfter: integer("balance_after").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  },
+  (t) => ({ byUser: index("ledger_user_idx").on(t.userId, t.createdAt) }),
+);
+
+/** Processed Stripe webhook event ids, for idempotency (Section 12). */
+export const stripeEvents = pgTable("stripe_events", {
+  id: text("id").primaryKey(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+});
+
+/**
  * Drizzle schema for the `jobs` table (Section 6). This is the production
  * Postgres schema; migrations are generated with drizzle-kit (`pnpm db:generate`)
  * and applied with `pnpm db:migrate`. The local dev JobStore mirrors the same

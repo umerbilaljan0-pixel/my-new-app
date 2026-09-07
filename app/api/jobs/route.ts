@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { errorResponse, jsonResponse } from "@/lib/api/respond";
 import { getStorage } from "@/lib/storage";
 import { getSession, setSessionCookie } from "@/lib/session";
+import { getSessionUser } from "@/lib/auth/session";
 import { clientIpFromHeaders, hashIp } from "@/lib/security";
 import { limit } from "@/lib/ratelimit";
 import { jobStore } from "@/lib/db/store";
@@ -53,6 +54,8 @@ export async function POST(req: NextRequest) {
 
   const ip = clientIpFromHeaders(req.headers);
   const { id: sid, isNew } = getSession(req);
+  const authUser = getSessionUser(req);
+  const ownerUserId = authUser?.userId ?? null;
   const rl = limit(`jobs:${hashIp(ip)}:${sid}`, 20, 60);
   if (!rl.success) {
     return errorResponse("RATE_LIMITED", {
@@ -116,7 +119,7 @@ export async function POST(req: NextRequest) {
   const cached = await store.findCached(source.inputHash, tool, pHash);
   if (cached) {
     const job = await store.create({
-      userId: null,
+      userId: ownerUserId,
       sessionId: sid,
       tool,
       params: body.params,
@@ -141,7 +144,7 @@ export async function POST(req: NextRequest) {
   }
 
   const job = await store.create({
-    userId: null,
+    userId: ownerUserId,
     sessionId: sid,
     tool,
     params: body.params,

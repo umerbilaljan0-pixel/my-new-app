@@ -2,6 +2,7 @@ import { type NextRequest } from "next/server";
 import { errorResponse, jsonResponse } from "@/lib/api/respond";
 import { getStorage } from "@/lib/storage";
 import { getSession } from "@/lib/session";
+import { getSessionUser } from "@/lib/auth/session";
 import { jobStore } from "@/lib/db/store";
 import { ERROR_META, type ErrorCode } from "@/lib/validation/errors";
 import type { JobStatus } from "@/lib/validation/jobs";
@@ -29,9 +30,13 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
   const job = await store.getById(id);
   if (!job) return errorResponse("JOB_NOT_FOUND");
 
-  // Ownership: anonymous jobs are readable only by the session that created them.
+  // Ownership: readable by the anon session that created it, or the signed-in
+  // owner (jobs created while authenticated carry a userId).
   const { id: sid } = getSession(req);
-  if (job.sessionId && job.sessionId !== sid) {
+  const user = getSessionUser(req);
+  const ownsAnon = job.sessionId && job.sessionId === sid;
+  const ownsUser = job.userId && user && job.userId === user.userId;
+  if (!ownsAnon && !ownsUser) {
     return errorResponse("JOB_NOT_FOUND");
   }
 

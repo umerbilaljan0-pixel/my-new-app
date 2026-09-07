@@ -3,11 +3,12 @@
 Three AI image tools — remove watermarks, remove backgrounds, upscale to 4K.
 Fast, honest, no-signup-to-try.
 
-> **Build status: Phases 1–4 complete.** The front-end foundation, the storage
-> & upload pipeline, and **all three tools working end-to-end** — CUTOUT
-> (background removal), ERASE (auto-detect + mask editor + inpainting) and UPLIFT
-> (resolution targeting) — plus **chaining** between them with no re-upload. No
-> account required. Accounts and billing are outlined below and in the spec.
+> **Build status: Phases 1–5 complete.** The full front-end, the storage &
+> upload pipeline, all three tools end-to-end (CUTOUT, ERASE, UPLIFT) with
+> chaining, and now **accounts, a credit ledger, Stripe billing, the HD-download
+> gate, and the `/app` dashboard** — with clean Google-OAuth-or-dev-login and
+> Stripe-or-dev-grant fallbacks so everything runs and is testable with no
+> external keys. Marketing/SEO and hardening remain (Phases 6–7).
 
 ---
 
@@ -121,6 +122,31 @@ picker → result; detect → erase → chain into upscale; mask editor draw →
 and at the API level (erase changes only masked pixels; uplift/chain hit exact
 target dimensions; detection finds the overlay).
 
+## Phase 5 — Accounts, credits & billing
+
+- **Auth** — a signed-cookie session (`lib/auth`) with real **Google OAuth**
+  (activated by `GOOGLE_CLIENT_ID/SECRET`) and a **dev email login** fallback
+  when Google isn't configured, so the app is usable and testable with no IdP.
+- **Credit ledger** (`lib/db/accounts`, `lib/credits`) — every credit change is
+  a ledger row; the balance is only ever mutated in the same transaction. The
+  `users.credits` column is a cache. Postgres + file-backed local store.
+- **Stripe billing** — `POST /api/billing/checkout` opens Stripe Checkout for
+  the $2 / 20-credit Starter pack when configured, and **grants instantly in dev**
+  otherwise; `POST /api/webhooks/stripe` grants credits on completion, idempotent
+  by event id.
+- **HD gate** — full-resolution download requires sign-in and credits; the credit
+  is charged **at download**, once per job (re-downloads are free; a 4K upscale
+  costs 2). A failed or never-downloaded job costs nothing.
+- **`/app` dashboard** — credits, recent jobs, 30-day re-downloadable history,
+  and billing with the credit ledger. Auth-gated.
+- **Session restore** — buying credits from a result returns to that exact result
+  (`?restore=<jobId>`) with the HD download unlocked.
+
+Verified end-to-end in Chromium (dev login → dashboard; run a tool → "Get
+credits" → purchase → **restore + HD unlocked**) and at the API level (17 checks:
+auth, HD gating at 0 credits, charge on download, no double-charge, 4K costs 2,
+sign-in required for HD, dashboard gating and rendering).
+
 ### Demo
 
 ```bash
@@ -130,14 +156,17 @@ pnpm dev
 # open http://localhost:3000/remove-background → CUTOUT, end-to-end
 # open http://localhost:3000/remove-watermark  → ERASE (detect + mask editor)
 # open http://localhost:3000/upscale-image      → UPLIFT (resolution targeting)
+# open http://localhost:3000/login             → sign in (dev email or Google)
+# open http://localhost:3000/app               → dashboard, history, billing
 # open http://localhost:3000/gallery           → component gallery (Phase 1 demo)
 ```
 
-With no `R2_*`, `DATABASE_URL` or `REPLICATE_API_TOKEN` set, the app uses the
-local storage adapter, a file-backed job store, and the built-in background
-remover — so the whole flow runs end-to-end with zero configuration. Set the
-`R2_*` / `DATABASE_URL` / `REPLICATE_*` env vars to switch each layer to its
-production backend, no code changes.
+With no `R2_*`, `DATABASE_URL`, `REPLICATE_API_TOKEN`, `GOOGLE_*` or `STRIPE_*`
+set, the app uses the local storage adapter, file-backed job + account stores,
+the built-in image algorithms, a dev email login, and an instant dev credit
+grant — so the whole product runs end-to-end with zero configuration. Set each
+provider's env vars to switch that layer to its production backend, no code
+changes.
 
 ## Scripts
 
@@ -166,11 +195,17 @@ app/
   (tools)/            Erase / Cut Out / Upscale landing pages
   layout.tsx          Root: fonts, theme styles + no-FOUC script, providers
   globals.css         Base styles + composed utilities (no raw hex)
+  app/                Auth-gated dashboard: home, history, billing
+  (marketing)/login/  Sign-in (Google + dev fallback)
   api/
     upload/           Presigned-URL issuer (validate, rate limit, presign)
     storage/[op]/     Local dev storage PUT/GET (production uses R2 directly)
-    jobs/             Create job, status, tier-gated download
+    jobs/             Create job, status, tier-gated (credit) download
+    detect/           ERASE overlay detection
     cron/cleanup/     24-hour purge endpoint
+    auth/             Google OAuth, dev login, me, signout
+    billing/checkout/ Stripe Checkout (or dev grant)
+    webhooks/stripe/  Grant credits on completed checkout
 components/
   ui/                 The primitive component library
   layout/             Header, Footer, MobileNav, ThemeToggle, Wordmark, shell
@@ -182,9 +217,12 @@ lib/
   storage/            Storage adapter — R2 + local fallback, keys, magic bytes
   image/              Client pipeline — worker, resize/EXIF-strip/hash
   upload/             uploadClient — presign + progress + cancel + retry
-  db/                 Drizzle schema + migrations + JobStore (pg | local)
-  inference/          Inference adapter — Replicate + local bg remover
+  db/                 Drizzle schema + migrations + JobStore + AccountStore
+  inference/          Inference adapter — Replicate + local (cutout/erase/uplift)
   jobs/               processor, dispatch, cleanup, client poller
+  auth/               Signed-cookie sessions, Google OAuth, config
+  credits.ts          Ledger-backed grant / charge / refund
+  stripe/             Stripe client (checkout + webhook)
   ratelimit.ts        Fixed-window limiter (Upstash-ready)
   security.ts         HMAC signing, IP hashing (server-only)
   nav.ts              Shared navigation data
@@ -201,8 +239,8 @@ workers/
 | 2     | Storage & upload — R2 presign, client resize/HEIC/EXIF/hash, real DropZone | ✅ Done |
 | 3     | One tool end-to-end — DB, queue, worker, inference adapter, CUTOUT      | ✅ Done |
 | 4     | ERASE (mask editor) + UPLIFT (resolution targeting) + chaining         | ✅ Done |
-| 5     | Accounts, credits ledger, Stripe checkout, HD download gate, dashboard | Next    |
-| 6     | Marketing & SEO — tool content, FAQ schema, blog, OG images, sitemap   | Planned |
+| 5     | Accounts, credits ledger, Stripe checkout, HD download gate, dashboard | ✅ Done |
+| 6     | Marketing & SEO — tool content, FAQ schema, blog, OG images, sitemap   | Next    |
 | 7     | Hardening — rate limits, abuse, Sentry, PostHog, cleanup cron, a11y/perf | Planned |
 | 8     | Batch mode, public API, API keys, Studio tier                          | Planned |
 

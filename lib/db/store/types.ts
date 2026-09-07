@@ -15,6 +15,8 @@ export interface JobStore {
   findCached(inputHash: string, tool: Tool, paramsHash: string): Promise<Job | null>;
   /** Atomically claim one queued job → processing (for the standalone worker). */
   claimNextQueued(): Promise<Job | null>;
+  /** A user's jobs, newest first (dashboard history). */
+  listByUser(userId: string, limit?: number): Promise<Job[]>;
   /** Jobs whose expires_at has passed (cleanup cron). */
   listExpired(now: Date): Promise<Job[]>;
   /** Remove a job row entirely (after its objects are purged). */
