@@ -2,11 +2,14 @@ import { Eraser, Scissors, Maximize2 } from "lucide-react";
 import { Hero } from "@/components/marketing/Hero";
 import { HowItWorks } from "@/components/marketing/HowItWorks";
 import { ToolCard } from "@/components/marketing/ToolCard";
+import { JsonLd } from "@/components/marketing/JsonLd";
+import { softwareApplicationLd } from "@/lib/seo";
 import { TRUST_LINE } from "@/lib/nav";
 
 export default function HomePage() {
   return (
     <>
+      <JsonLd data={softwareApplicationLd()} />
       <Hero />
 
       <section className="container-page py-16">

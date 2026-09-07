@@ -63,4 +63,22 @@ export interface AccountStore {
   listLedger(userId: string, limit?: number): Promise<LedgerEntry[]>;
   /** Record a processed Stripe event id; returns true if newly recorded. */
   markStripeEvent(id: string): Promise<boolean>;
+
+  /* ── API keys (Phase 8) ─────────────────────────────────────────────────── */
+  createApiKey(input: { userId: string; keyHash: string; keyPrefix: string; name: string | null }): Promise<ApiKey>;
+  listApiKeys(userId: string): Promise<ApiKey[]>;
+  /** Look up an active (non-revoked) key by its hash for authentication. */
+  findApiKeyByHash(keyHash: string): Promise<ApiKey | null>;
+  revokeApiKey(userId: string, id: string): Promise<boolean>;
+  touchApiKey(id: string): Promise<void>;
+}
+
+export interface ApiKey {
+  id: string;
+  userId: string;
+  keyPrefix: string;
+  name: string | null;
+  lastUsedAt: string | null;
+  revokedAt: string | null;
+  createdAt: string;
 }

@@ -4,7 +4,7 @@ import { errorResponse, jsonResponse } from "@/lib/api/respond";
 import { getStorage } from "@/lib/storage";
 import { inputKey } from "@/lib/storage/keys";
 import { clientIpFromHeaders, hashIp } from "@/lib/security";
-import { limit } from "@/lib/ratelimit";
+import { rateLimit } from "@/lib/ratelimit";
 import {
   ACCEPTED_MIME,
   MAX_BYTES,
@@ -73,7 +73,7 @@ export async function POST(req: NextRequest) {
     [`upload:day:${bucketKey}`, 200, 86400],
   ];
   for (const [key, max, win] of windows) {
-    const res = limit(key, max, win);
+    const res = await rateLimit(key, max, win);
     if (!res.success) {
       return errorResponse("RATE_LIMITED", {
         message: `Slow down a moment — try again in ${res.resetSeconds} seconds.`,

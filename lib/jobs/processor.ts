@@ -7,6 +7,8 @@ import { jobStore } from "@/lib/db/store";
 import type { Job } from "@/lib/db/types";
 import { JOB_MAX_ATTEMPTS, JOB_TIMEOUT_MS, PREVIEW_LONG_EDGE } from "./config";
 import { UPLIFT_TARGETS } from "@/lib/validation/jobs";
+import { captureException } from "@/lib/observability/sentry";
+import { refundCredits } from "@/lib/credits";
 import type { ErrorCode } from "@/lib/validation/errors";
 
 /**
@@ -82,6 +84,17 @@ export async function runJob(jobId: string): Promise<ProcessOutcome> {
   }
 
   const code: ErrorCode = lastErr instanceof TimeoutError ? "INFERENCE_TIMEOUT" : "INFERENCE_FAILED";
+  void captureException(lastErr, { jobId, tool: job.tool, code });
+  // Auto-refund any credits charged up front (API jobs). Interactive jobs are
+  // charged at download, so they were never charged and this is a no-op.
+  if (job.userId && job.creditsCharged > 0) {
+    try {
+      await refundCredits(job.userId, job.creditsCharged, jobId);
+      await store.update(jobId, { creditsCharged: 0 });
+    } catch (refundErr) {
+      console.error(`[processor] refund failed for ${jobId}`, refundErr);
+    }
+  }
   await store.update(jobId, {
     status: "failed",
     errorCode: code,

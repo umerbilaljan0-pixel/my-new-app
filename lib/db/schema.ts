@@ -52,6 +52,22 @@ export const stripeEvents = pgTable("stripe_events", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 });
 
+/** api_keys (Section 6) — Studio-tier public API keys, stored hashed. */
+export const apiKeys = pgTable(
+  "api_keys",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id").notNull(),
+    keyHash: text("key_hash").notNull().unique(),
+    keyPrefix: text("key_prefix").notNull(),
+    name: text("name"),
+    lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  },
+  (t) => ({ byUser: index("apikeys_user_idx").on(t.userId) }),
+);
+
 /**
  * Drizzle schema for the `jobs` table (Section 6). This is the production
  * Postgres schema; migrations are generated with drizzle-kit (`pnpm db:generate`)

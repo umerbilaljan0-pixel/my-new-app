@@ -21,4 +21,4 @@ export async function accountStore(): Promise<AccountStore> {
   return getAccountStore();
 }
 
-export type { AccountStore, User, LedgerEntry } from "./types";
+export type { AccountStore, User, LedgerEntry, ApiKey } from "./types";

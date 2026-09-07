@@ -6,8 +6,10 @@ import { cn } from "@/lib/utils";
 
 const LINKS = [
   { href: "/app", label: "Dashboard" },
+  { href: "/app/batch", label: "Batch" },
   { href: "/app/history", label: "History" },
   { href: "/app/billing", label: "Billing" },
+  { href: "/app/api-keys", label: "API keys" },
 ];
 
 export function AppNav() {

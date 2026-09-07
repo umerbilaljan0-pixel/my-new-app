@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Download, Coins, LogIn } from "lucide-react";
 import { formatBytes } from "@/lib/format";
+import { track } from "@/lib/analytics";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { useToast } from "@/components/ui/Toast";
 
@@ -29,6 +30,7 @@ export function DownloadCard({ jobId, width, height, bytes }: DownloadCardProps)
 
   const buyCredits = async () => {
     setBusy(true);
+    track("checkout_started", { plan: "starter", from: "download" });
     try {
       const res = await fetch("/api/billing/checkout", {
         method: "POST",
@@ -64,7 +66,10 @@ export function DownloadCard({ jobId, width, height, bytes }: DownloadCardProps)
         <a
           href={`/api/jobs/${jobId}/download?quality=full`}
           download
-          onClick={() => setTimeout(() => void refresh(), 1500)}
+          onClick={() => {
+            track("download_hd", { jobId });
+            setTimeout(() => void refresh(), 1500);
+          }}
           className="mt-auto inline-flex h-11 items-center justify-center gap-2 rounded-md bg-amber px-5 text-sm font-semibold text-white transition-colors hover:bg-amber-press active:scale-[0.98]"
         >
           <Download size={16} /> Download HD
@@ -93,6 +98,7 @@ export function DownloadCard({ jobId, width, height, bytes }: DownloadCardProps)
         <a
           href={`/api/jobs/${jobId}/download?quality=preview`}
           download
+          onClick={() => track("download_free", { jobId })}
           className="mt-auto inline-flex h-11 items-center justify-center gap-2 rounded-md border border-line bg-surface px-5 text-sm font-semibold text-ink transition-colors hover:border-line-strong hover:bg-sunken active:scale-[0.98]"
         >
           <Download size={16} /> Download free

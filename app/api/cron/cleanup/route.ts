@@ -5,11 +5,12 @@ import { runCleanup } from "@/lib/jobs/cleanup";
 export const runtime = "nodejs";
 
 /**
- * POST /api/cron/cleanup — runs the 24-hour purge (Section 13). Protected by a
- * bearer token so it can be wired to a scheduler (Vercel Cron / external). When
- * CRON_SECRET is unset (dev) it is open, so the deletion job is demonstrable.
+ * /api/cron/cleanup — runs the 24-hour purge (Section 13). Protected by a bearer
+ * token so it can be wired to a scheduler; when CRON_SECRET is unset (dev) it is
+ * open so the deletion job is demonstrable. GET is exposed for Vercel Cron (which
+ * issues GET); POST for manual/external triggers.
  */
-export async function POST(req: NextRequest) {
+async function handle(req: NextRequest) {
   const secret = process.env.CRON_SECRET;
   if (secret) {
     const auth = req.headers.get("authorization");
@@ -18,3 +19,6 @@ export async function POST(req: NextRequest) {
   const { purged } = await runCleanup();
   return jsonResponse({ purged });
 }
+
+export const GET = handle;
+export const POST = handle;

@@ -16,6 +16,7 @@ import { ErrorState } from "@/components/ui/ErrorState";
 import { formatBytes } from "@/lib/format";
 import { startUpload, uploadBlob, UploadError, type UploadHandle } from "@/lib/upload/uploadClient";
 import { createJob, pollJob, detectOverlays, JobError } from "@/lib/jobs/client";
+import { track } from "@/lib/analytics";
 import type { DetectBox, JobParams, Tool, UpliftTarget } from "@/lib/validation/jobs";
 
 type Phase = "idle" | "uploading" | "detect" | "mask" | "resolution" | "processing" | "result" | "error";
@@ -124,6 +125,7 @@ export function ToolStudio({ initialTool }: ToolStudioProps) {
         if (!done.previewUrl) throw new JobError("INTERNAL", "No preview returned.", true);
         setResult({ jobId: created.jobId, previewUrl: done.previewUrl, width: done.meta?.width, height: done.meta?.height, bytes: done.meta?.bytes });
         setPhase("result");
+        track("job_completed", { tool: params.tool, cached: created.cached });
       } catch (err) {
         fail(err);
       }
@@ -159,6 +161,7 @@ export function ToolStudio({ initialTool }: ToolStudioProps) {
       const url = URL.createObjectURL(f);
       if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
       objectUrlRef.current = url;
+      track("file_dropped", { tool, bytes: f.size, mime: f.type });
       setDisplayUrl(url);
       setError(null);
       setResult(null);

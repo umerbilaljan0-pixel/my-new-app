@@ -5,7 +5,7 @@ import { getStorage } from "@/lib/storage";
 import { getSession, setSessionCookie } from "@/lib/session";
 import { getSessionUser } from "@/lib/auth/session";
 import { clientIpFromHeaders, hashIp } from "@/lib/security";
-import { limit } from "@/lib/ratelimit";
+import { rateLimit } from "@/lib/ratelimit";
 import { jobStore } from "@/lib/db/store";
 import { dispatch } from "@/lib/jobs/dispatch";
 import { OBJECT_TTL_HOURS } from "@/lib/jobs/config";
@@ -56,7 +56,7 @@ export async function POST(req: NextRequest) {
   const { id: sid, isNew } = getSession(req);
   const authUser = getSessionUser(req);
   const ownerUserId = authUser?.userId ?? null;
-  const rl = limit(`jobs:${hashIp(ip)}:${sid}`, 20, 60);
+  const rl = await rateLimit(`jobs:${hashIp(ip)}:${sid}`, 20, 60);
   if (!rl.success) {
     return errorResponse("RATE_LIMITED", {
       message: `Slow down a moment — try again in ${rl.resetSeconds} seconds.`,

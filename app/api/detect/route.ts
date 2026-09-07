@@ -2,7 +2,7 @@ import { type NextRequest } from "next/server";
 import { errorResponse, jsonResponse } from "@/lib/api/respond";
 import { getStorage } from "@/lib/storage";
 import { clientIpFromHeaders, hashIp } from "@/lib/security";
-import { limit } from "@/lib/ratelimit";
+import { rateLimit } from "@/lib/ratelimit";
 import { detectOverlays } from "@/lib/inference/detect";
 import { detectRequestSchema, type DetectResponse } from "@/lib/validation/jobs";
 
@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
   if (!parsed.success) return errorResponse("UNSUPPORTED_FORMAT", { message: "Invalid detect request." });
 
   const ip = clientIpFromHeaders(req.headers);
-  const rl = limit(`detect:${hashIp(ip)}`, 30, 60);
+  const rl = await rateLimit(`detect:${hashIp(ip)}`, 30, 60);
   if (!rl.success) {
     return errorResponse("RATE_LIMITED", {
       message: `Slow down a moment — try again in ${rl.resetSeconds} seconds.`,

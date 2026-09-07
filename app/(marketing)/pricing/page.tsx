@@ -1,11 +1,26 @@
 import type { Metadata } from "next";
 import { PriceCard } from "@/components/marketing/PriceCard";
+import { FAQAccordion } from "@/components/ui/FAQAccordion";
+import { JsonLd } from "@/components/marketing/JsonLd";
+import { faqPageLd, ogImage, type Faq } from "@/lib/seo";
 
 export const metadata: Metadata = {
   title: "Pricing",
   description:
     "Start free. Pay $2 when you need full resolution. Cancel anything, anytime.",
+  alternates: { canonical: "/pricing" },
+  openGraph: { title: "CLEANPLATE Pricing", images: [ogImage("Simple pricing. No surprises.", "CLEANPLATE")] },
 };
+
+const FAQS: Faq[] = [
+  { q: "Do I need an account?", a: "No. Your first images work with no signup at all." },
+  { q: "What happens to my images?", a: "They're deleted from our servers within 24 hours, always." },
+  { q: "Why is the free download smaller?", a: "Free gives you 1200px on the long edge, which is fine for web and social. Full resolution costs 1 credit." },
+  { q: "Do credits expire?", a: "Starter credits never expire. Monthly plan credits reset each month." },
+  { q: "Can I use the results commercially?", a: "Yes on Studio, and on any plan for images you own or are licensed to use." },
+  { q: "What file types work?", a: "PNG, JPG, WEBP and HEIC in. PNG or JPG out, with transparency supported on PNG." },
+  { q: "Is there an API?", a: "Yes, on Studio. See the API docs." },
+];
 
 const PLANS = [
   {
@@ -84,6 +99,15 @@ export default function PricingPage() {
         <span className="tabular">1</span> image up to 2K. A 4K upscale costs{" "}
         <span className="tabular">2</span>. Failed jobs are never charged.
       </p>
+
+      <section className="mx-auto mt-20 w-full max-w-3xl">
+        <h2 className="text-center font-display text-2xl font-bold tracking-tight text-ink">Questions</h2>
+        <div className="mt-8">
+          <FAQAccordion faqs={FAQS} />
+        </div>
+      </section>
+
+      <JsonLd data={faqPageLd(FAQS)} />
     </div>
   );
 }

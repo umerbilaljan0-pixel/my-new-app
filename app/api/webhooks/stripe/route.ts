@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from "next/server";
 import { getStripe } from "@/lib/stripe";
 import { accountStore } from "@/lib/db/accounts";
 import { grantCredits } from "@/lib/credits";
+import { captureException } from "@/lib/observability/sentry";
 
 export const runtime = "nodejs";
 
@@ -48,6 +49,7 @@ export async function POST(req: NextRequest) {
     // later iteration; the one-time pack is the primary on-ramp.
   } catch (err) {
     console.error("[stripe] handling failed", err);
+    void captureException(err, { eventType: event.type });
     return NextResponse.json({ error: "handler failed" }, { status: 500 });
   }
 

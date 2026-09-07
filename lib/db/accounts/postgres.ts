@@ -1,6 +1,7 @@
 import "server-only";
 import type {
   AccountStore,
+  ApiKey,
   AppendLedgerInput,
   LedgerEntry,
   LedgerReason,
@@ -55,8 +56,18 @@ export async function createPostgresAccountStore(databaseUrl: string): Promise<A
   ]);
   const client = postgres(databaseUrl, { prepare: false });
   const db = drizzle(client);
-  const { users, creditLedger, stripeEvents } = schema;
-  const { eq, desc } = orm;
+  const { users, creditLedger, stripeEvents, apiKeys } = schema;
+  const { eq, and, isNull, desc } = orm;
+
+  const rowToApiKey = (r: Record<string, unknown>): ApiKey => ({
+    id: r.id as string,
+    userId: r.userId as string,
+    keyPrefix: r.keyPrefix as string,
+    name: (r.name as string) ?? null,
+    lastUsedAt: r.lastUsedAt ? iso(r.lastUsedAt) : null,
+    revokedAt: r.revokedAt ? iso(r.revokedAt) : null,
+    createdAt: iso(r.createdAt),
+  });
 
   return {
     backend: "postgres",
@@ -145,6 +156,45 @@ export async function createPostgresAccountStore(databaseUrl: string): Promise<A
       // RETURNING is empty when the row already existed → not newly recorded.
       const inserted = await db.insert(stripeEvents).values({ id }).onConflictDoNothing().returning();
       return inserted.length > 0;
+    },
+
+    async createApiKey({ userId, keyHash, keyPrefix, name }): Promise<ApiKey> {
+      const [row] = await db
+        .insert(apiKeys)
+        .values({ userId, keyHash, keyPrefix, name: name ?? null })
+        .returning();
+      return rowToApiKey(row as Record<string, unknown>);
+    },
+
+    async listApiKeys(userId: string): Promise<ApiKey[]> {
+      const rows = await db
+        .select()
+        .from(apiKeys)
+        .where(eq(apiKeys.userId, userId))
+        .orderBy(desc(apiKeys.createdAt));
+      return (rows as Record<string, unknown>[]).map(rowToApiKey);
+    },
+
+    async findApiKeyByHash(keyHash: string): Promise<ApiKey | null> {
+      const [row] = await db
+        .select()
+        .from(apiKeys)
+        .where(and(eq(apiKeys.keyHash, keyHash), isNull(apiKeys.revokedAt)))
+        .limit(1);
+      return row ? rowToApiKey(row as Record<string, unknown>) : null;
+    },
+
+    async revokeApiKey(userId: string, id: string): Promise<boolean> {
+      const rows = await db
+        .update(apiKeys)
+        .set({ revokedAt: new Date() })
+        .where(and(eq(apiKeys.id, id), eq(apiKeys.userId, userId), isNull(apiKeys.revokedAt)))
+        .returning();
+      return rows.length > 0;
+    },
+
+    async touchApiKey(id: string): Promise<void> {
+      await db.update(apiKeys).set({ lastUsedAt: new Date() }).where(eq(apiKeys.id, id));
     },
   };
 }

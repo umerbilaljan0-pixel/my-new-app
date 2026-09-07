@@ -1,0 +1,37 @@
+---
+title: PNG vs JPG — which to use when editing images
+description: Transparency, quality and file size all hinge on picking the right format. A short, practical guide for anyone cleaning up images.
+date: 2026-07-28
+tags: [guide, formats]
+---
+
+Most "why does my image look bad?" problems come down to the wrong format at the
+wrong step. Here's the short version.
+
+## Use PNG when you need transparency
+
+If any part of your image is see-through — a cut-out product, a logo, an overlay —
+you need **PNG**. It's the only common web format that stores a real alpha
+channel. Export a background-removed image as JPG and the transparency collapses
+to a solid colour (usually white).
+
+## Use JPG for photos without transparency
+
+For a full-frame photo with no transparency, **JPG** is smaller at the same
+perceived quality. A 4000px photo as PNG can be several times larger than the same
+photo as a high-quality JPG, with no visible benefit.
+
+## Don't re-save JPGs over and over
+
+JPG is *lossy*: every save throws away a little detail. Edit from the best copy you
+have, and avoid a chain of "open, tweak, re-save as JPG" — the artefacts compound.
+When you're doing several edits, keep an intermediate PNG and export to JPG once at
+the end.
+
+## What CLEANPLATE outputs
+
+- **Cut Out** exports PNG so transparency survives.
+- **Erase** and **Upscale** default to PNG for quality; JPG is available where a
+  smaller file matters more than a perfectly clean edge.
+- Every result is EXIF-stripped, so you're not shipping camera or location
+  metadata to whoever you send it to.

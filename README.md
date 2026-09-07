@@ -3,12 +3,13 @@
 Three AI image tools — remove watermarks, remove backgrounds, upscale to 4K.
 Fast, honest, no-signup-to-try.
 
-> **Build status: Phases 1–5 complete.** The full front-end, the storage &
-> upload pipeline, all three tools end-to-end (CUTOUT, ERASE, UPLIFT) with
-> chaining, and now **accounts, a credit ledger, Stripe billing, the HD-download
-> gate, and the `/app` dashboard** — with clean Google-OAuth-or-dev-login and
-> Stripe-or-dev-grant fallbacks so everything runs and is testable with no
-> external keys. Marketing/SEO and hardening remain (Phases 6–7).
+> **Build status: Phases 1–8 complete.** The full product — front-end, storage &
+> upload, all three tools with chaining, accounts + credit ledger + Stripe
+> billing + dashboard, **marketing & SEO**, **hardening** (rate limiting, error
+> tracking, analytics, cleanup cron), and **the public API, API keys and batch
+> mode**. Every external integration (R2, Postgres, Replicate, Google, Stripe,
+> Upstash, Sentry, PostHog) has a clean fallback so the whole thing runs and is
+> testable with no keys.
 
 ---
 
@@ -147,6 +148,46 @@ credits" → purchase → **restore + HD unlocked**) and at the API level (17 ch
 auth, HD gating at 0 credits, charge on download, no double-charge, 4K costs 2,
 sign-in required for HD, dashboard gating and rendering).
 
+## Phase 6 — Marketing & SEO
+
+- **Long-form tool pages** (`lib/content/tools.ts`) — real what-it-does / how-to /
+  use-cases / FAQ content under each tool, with internal linking.
+- **JSON-LD** — `SoftwareApplication` on home, `FAQPage` on tool pages + pricing,
+  `Article` + `BreadcrumbList` on blog posts (`lib/seo.ts`, `<JsonLd>`).
+- **Blog** — MDX posts in `content/blog` rendered with `next-mdx-remote`
+  (`lib/blog.ts`), seeded with four genuine guides.
+- **Dynamic OG images** — `/api/og` renders branded 1200×630 cards with `next/og`,
+  wired into each page's `openGraph.images`.
+- **`app/sitemap.ts` + `app/robots.ts`** — generated `sitemap.xml` (incl. posts)
+  and `robots.txt` (disallowing `/app` and `/api`).
+
+## Phase 7 — Hardening
+
+- **Rate limiting** (`lib/ratelimit.ts`) — an async limiter that uses **Upstash
+  Redis (REST)** when configured and an in-memory limiter otherwise, fail-soft;
+  wired into upload / jobs / detect / v1.
+- **Error tracking** (`lib/observability/sentry.ts`) — posts Sentry envelopes when
+  `SENTRY_DSN` is set (no SDK dependency), scrubbing emails and image URLs.
+- **Analytics** (`components/analytics/PostHogProvider`, `lib/analytics.ts`) —
+  PostHog pageviews + funnel events (file_dropped, job_completed, download_*,
+  checkout_started) when `NEXT_PUBLIC_POSTHOG_KEY` is set; no-op otherwise.
+- **Cleanup cron** — `vercel.json` schedules `/api/cron/cleanup` hourly (bearer
+  protected); the standalone worker also runs it.
+
+## Phase 8 — Batch, public API, API keys
+
+- **API keys** (`api_keys` table, `lib/apikeys.ts`, `/app/api-keys`) — generated
+  `cp_live_…` keys, stored hashed, shown once, revocable.
+- **Public API** — `POST /api/v1/jobs` (bearer-key auth, image URL or base64,
+  credits charged at creation and auto-refunded on failure) and
+  `GET /api/v1/jobs/:id` (signed full-res output). Docs at `/api-docs`.
+- **Batch mode** (`/app/batch`) — remove backgrounds from up to 20 images with a
+  concurrency pool, per-image status, and a JSZip download.
+
+Verified end-to-end: 19 API checks (SEO/sitemap/robots/OG/blog, rate-limit trip,
+cron, API-key lifecycle, v1 auth + credit gate + charge + refund + revoke) and 5
+browser checks (batch processing + ZIP, API-key creation).
+
 ### Demo
 
 ```bash
@@ -240,9 +281,9 @@ workers/
 | 3     | One tool end-to-end — DB, queue, worker, inference adapter, CUTOUT      | ✅ Done |
 | 4     | ERASE (mask editor) + UPLIFT (resolution targeting) + chaining         | ✅ Done |
 | 5     | Accounts, credits ledger, Stripe checkout, HD download gate, dashboard | ✅ Done |
-| 6     | Marketing & SEO — tool content, FAQ schema, blog, OG images, sitemap   | Next    |
-| 7     | Hardening — rate limits, abuse, Sentry, PostHog, cleanup cron, a11y/perf | Planned |
-| 8     | Batch mode, public API, API keys, Studio tier                          | Planned |
+| 6     | Marketing & SEO — tool content, FAQ schema, blog, OG images, sitemap   | ✅ Done |
+| 7     | Hardening — rate limits, Sentry, PostHog, cleanup cron                 | ✅ Done |
+| 8     | Batch mode, public API, API keys, Studio tier                          | ✅ Done |
 
 Environment variables for later phases are documented in `.env.example`.
 

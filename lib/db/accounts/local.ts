@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import type {
   AccountStore,
+  ApiKey,
   AppendLedgerInput,
   LedgerEntry,
   User,
@@ -17,15 +18,21 @@ import type {
 
 const FILE = path.join(tmpdir(), "cleanplate-accounts.json");
 
+interface StoredApiKey extends ApiKey {
+  keyHash: string;
+}
+
 interface DbShape {
   users: Record<string, User>;
   emailIndex: Record<string, string>;
   ledger: LedgerEntry[];
   stripeEvents: Record<string, true>;
+  apiKeys: StoredApiKey[];
 }
 
 function read(): DbShape {
-  if (!existsSync(FILE)) return { users: {}, emailIndex: {}, ledger: [], stripeEvents: {} };
+  const empty: DbShape = { users: {}, emailIndex: {}, ledger: [], stripeEvents: {}, apiKeys: [] };
+  if (!existsSync(FILE)) return empty;
   try {
     const db = JSON.parse(readFileSync(FILE, "utf8")) as Partial<DbShape>;
     return {
@@ -33,9 +40,10 @@ function read(): DbShape {
       emailIndex: db.emailIndex ?? {},
       ledger: db.ledger ?? [],
       stripeEvents: db.stripeEvents ?? {},
+      apiKeys: db.apiKeys ?? [],
     };
   } catch {
-    return { users: {}, emailIndex: {}, ledger: [], stripeEvents: {} };
+    return empty;
   }
 }
 
@@ -142,6 +150,61 @@ export function createLocalAccountStore(): AccountStore {
       db.stripeEvents[id] = true;
       write(db);
       return true;
+    },
+
+    async createApiKey({ userId, keyHash, keyPrefix, name }): Promise<ApiKey> {
+      const db = read();
+      const rec: StoredApiKey = {
+        id: randomUUID(),
+        userId,
+        keyHash,
+        keyPrefix,
+        name: name ?? null,
+        lastUsedAt: null,
+        revokedAt: null,
+        createdAt: new Date().toISOString(),
+      };
+      db.apiKeys.push(rec);
+      write(db);
+      const { keyHash: _h, ...pub } = rec;
+      void _h;
+      return pub;
+    },
+
+    async listApiKeys(userId: string): Promise<ApiKey[]> {
+      return read()
+        .apiKeys.filter((k) => k.userId === userId)
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+        .map(({ keyHash: _h, ...pub }) => {
+          void _h;
+          return pub;
+        });
+    },
+
+    async findApiKeyByHash(keyHash: string): Promise<ApiKey | null> {
+      const rec = read().apiKeys.find((k) => k.keyHash === keyHash && !k.revokedAt);
+      if (!rec) return null;
+      const { keyHash: _h, ...pub } = rec;
+      void _h;
+      return pub;
+    },
+
+    async revokeApiKey(userId: string, id: string): Promise<boolean> {
+      const db = read();
+      const rec = db.apiKeys.find((k) => k.id === id && k.userId === userId);
+      if (!rec || rec.revokedAt) return false;
+      rec.revokedAt = new Date().toISOString();
+      write(db);
+      return true;
+    },
+
+    async touchApiKey(id: string): Promise<void> {
+      const db = read();
+      const rec = db.apiKeys.find((k) => k.id === id);
+      if (rec) {
+        rec.lastUsedAt = new Date().toISOString();
+        write(db);
+      }
     },
   };
 }
