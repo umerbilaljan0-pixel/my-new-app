@@ -51,13 +51,18 @@ export const eraseParamsSchema = z.object({
 });
 export type EraseParams = z.infer<typeof eraseParamsSchema>;
 
-/** UPLIFT (upscale) target resolutions — a box the long edge fits within. */
+/** UPLIFT (upscale) target resolutions — a box the long edge fits within.
+ * 8K is capped at 7680px long edge (≤8192px canvas, Section 8.3). */
 export const UPLIFT_TARGETS = {
   "1080p": 1920,
   "2k": 2560,
   "4k": 3840,
+  "8k": 7680,
 } as const;
 export type UpliftTarget = keyof typeof UPLIFT_TARGETS;
+
+/** Hard ceiling on any output edge (decompression / memory guard). */
+export const MAX_OUTPUT_EDGE = 8192;
 
 /**
  * UPLIFT (upscale) parameters (Section 8.3). The user picks an output resolution,
@@ -66,7 +71,7 @@ export type UpliftTarget = keyof typeof UPLIFT_TARGETS;
  */
 export const upliftParamsSchema = z.object({
   tool: z.literal("uplift"),
-  target: z.enum(["1080p", "2k", "4k"]),
+  target: z.enum(["1080p", "2k", "4k", "8k"]),
   model: z.enum(["photo", "illustration", "auto"]).default("auto"),
   enhanceFaces: z.boolean().default(false),
   denoise: z.number().int().min(0).max(100).default(0),

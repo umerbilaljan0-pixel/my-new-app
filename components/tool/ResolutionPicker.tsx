@@ -15,9 +15,10 @@ const LABELS: Record<UpliftTarget, string> = {
   "1080p": "1080p",
   "2k": "2K",
   "4k": "4K",
+  "8k": "8K",
 };
-const EST_SECONDS: Record<UpliftTarget, number> = { "1080p": 4, "2k": 8, "4k": 15 };
-const CREDITS: Record<UpliftTarget, number> = { "1080p": 1, "2k": 1, "4k": 2 };
+const EST_SECONDS: Record<UpliftTarget, number> = { "1080p": 4, "2k": 8, "4k": 15, "8k": 30 };
+const CREDITS: Record<UpliftTarget, number> = { "1080p": 1, "2k": 1, "4k": 2, "8k": 3 };
 
 function outputDims(sw: number, sh: number, longEdge: number) {
   const src = Math.max(sw, sh) || 1;

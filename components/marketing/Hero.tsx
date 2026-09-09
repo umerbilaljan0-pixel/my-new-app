@@ -1,9 +1,11 @@
 import { Uploader } from "@/components/tool/Uploader";
+import { VideoPreview } from "@/components/marketing/VideoPreview";
 
 /**
  * Hero — H1, sub, and the live drop zone (Sections 9.1 / 9.2). The Uploader is
  * the real working tool: drop an image and it is processed in-browser and
- * uploaded to storage, with real progress — not a picture of a tool.
+ * uploaded to storage, with real progress — not a picture of a tool. Below it, a
+ * combined showcase clip shows all three tools working together.
  */
 export function Hero() {
   return (
@@ -14,7 +16,7 @@ export function Hero() {
         </h1>
         <p className="prose-measure mt-5 text-base text-ink-mid">
           Three AI tools for images — erase watermarks, cut out backgrounds,
-          upscale to 4K. No signup. Results in seconds.
+          upscale to 8K. No signup. Results in seconds.
         </p>
       </div>
 
@@ -23,6 +25,18 @@ export function Hero() {
         <p className="mt-4 text-center text-sm text-ink-mid">
           <span className="tabular">20</span> full-resolution images for{" "}
           <span className="tabular">$2</span>. No subscription.
+        </p>
+      </div>
+
+      <div className="mx-auto mt-14 max-w-3xl">
+        <VideoPreview
+          src="/media/showcase.mp4"
+          label="CLEANPLATE removing a background, erasing a watermark and upscaling a photo"
+          priority
+          className="shadow-float"
+        />
+        <p className="mt-3 text-center text-2xs text-ink-low">
+          All three tools, one workflow — watch a photo go from raw to shipped.
         </p>
       </div>
     </section>

@@ -2,6 +2,7 @@ import { Eraser, Scissors, Maximize2 } from "lucide-react";
 import { Hero } from "@/components/marketing/Hero";
 import { HowItWorks } from "@/components/marketing/HowItWorks";
 import { ToolCard } from "@/components/marketing/ToolCard";
+import { VideoPreview } from "@/components/marketing/VideoPreview";
 import { JsonLd } from "@/components/marketing/JsonLd";
 import { softwareApplicationLd } from "@/lib/seo";
 import { TRUST_LINE } from "@/lib/nav";
@@ -33,7 +34,15 @@ export default function HomePage() {
             icon={Maximize2}
             name="Upscale"
             href="/upscale-image"
-            description="Sharpen and enlarge to 1080p, 2K or 4K. Recovers detail instead of just stretching pixels."
+            description="Sharpen and enlarge to 1080p, 2K, 4K or 8K. Recovers detail instead of just stretching pixels."
+          />
+        </div>
+
+        <div className="mx-auto mt-12 max-w-3xl">
+          <VideoPreview
+            src="/media/interface.mp4"
+            label="The CLEANPLATE interface performing AI image transformations"
+            className="shadow-float"
           />
         </div>
       </section>
