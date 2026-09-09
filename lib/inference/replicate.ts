@@ -106,22 +106,27 @@ export function createReplicateInference(cfg: ReplicateConfig): InferenceAdapter
         mask: dataUri(input.maskBytes, "image/png"),
       });
       // Guarantee only masked pixels change: composite the model output onto the
-      // original, using the mask as the output layer's alpha.
+      // original, using the (resized) mask as the output layer's alpha. The mask
+      // is fed as genuine raw single-channel data so the join is unambiguous.
       const meta = await sharp(Buffer.from(input.bytes)).metadata();
       const w = meta.width ?? 0;
       const h = meta.height ?? 0;
-      const outputRgb = await sharp(Buffer.from(raw)).resize(w, h, { fit: "fill" }).removeAlpha();
+      if (!w || !h) throw new Error("replicate inpaint: could not read input dimensions");
+
+      const outputRgb = sharp(Buffer.from(raw)).resize(w, h, { fit: "fill" }).removeAlpha();
       const maskAlpha = await sharp(Buffer.from(input.maskBytes))
         .resize(w, h, { fit: "fill" })
         .greyscale()
-        .toColourspace("b-w")
-        .toBuffer();
+        .raw()
+        .toBuffer(); // w*h single-channel bytes
+
       const outputWithAlpha = await outputRgb
-        .joinChannel(maskAlpha)
+        .joinChannel(maskAlpha, { raw: { width: w, height: h, channels: 1 } })
         .png()
         .toBuffer();
       const composed = await sharp(Buffer.from(input.bytes))
-        .composite([{ input: outputWithAlpha }])
+        .ensureAlpha()
+        .composite([{ input: outputWithAlpha, blend: "over" }])
         .png()
         .toBuffer({ resolveWithObject: true });
       return {
@@ -144,12 +149,13 @@ export function createReplicateInference(cfg: ReplicateConfig): InferenceAdapter
       const sw = meta.width ?? 1;
       const sh = meta.height ?? 1;
       const outScale = input.targetLongEdge / longEdge;
-      const outW = Math.round(sw * outScale);
-      const outH = Math.round(sh * outScale);
-      const png = await sharp(Buffer.from(raw))
-        .resize(outW, outH, { kernel: "lanczos3", fit: "fill" })
-        .png()
-        .toBuffer({ resolveWithObject: true });
+      const outW = Math.max(1, Math.round(sw * outScale));
+      const outH = Math.max(1, Math.round(sh * outScale));
+      let pipe = sharp(Buffer.from(raw)).resize(outW, outH, { kernel: "lanczos3", fit: "fill" });
+      if (input.params.sharpen > 0) {
+        pipe = pipe.sharpen({ sigma: 0.5 + (input.params.sharpen / 100) * 1.2 });
+      }
+      const png = await pipe.png({ compressionLevel: 9 }).toBuffer({ resolveWithObject: true });
       return {
         bytes: new Uint8Array(png.data),
         contentType: "image/png",

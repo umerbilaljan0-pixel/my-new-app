@@ -38,11 +38,19 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
   const storage = getStorage();
 
   if (quality === "full") {
-    if (!user) return errorResponse("UNAUTHORIZED", { message: "Sign in to download full resolution." });
     if (!job.outputKey) return errorResponse("JOB_NOT_FOUND", { message: "No full-resolution output." });
 
-    // Charge once per job. creditsCharged>0 means this job is already unlocked.
-    if (!job.creditsCharged || job.creditsCharged <= 0) {
+    // Client-computed results (browser WASM models) are free to download at full
+    // resolution — the visitor's own device did the work, so no credit is charged
+    // and sign-in isn't required.
+    const isClientJob = (job.provider ?? "").startsWith("client");
+
+    if (!isClientJob && !user) {
+      return errorResponse("UNAUTHORIZED", { message: "Sign in to download full resolution." });
+    }
+
+    // Charge once per job (server-run jobs only). creditsCharged>0 means unlocked.
+    if (!isClientJob && user && (!job.creditsCharged || job.creditsCharged <= 0)) {
       const cost = hdCostForJob(job);
       try {
         await chargeCredits(user.userId, cost, job.id);
