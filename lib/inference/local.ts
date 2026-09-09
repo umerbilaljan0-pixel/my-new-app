@@ -1,5 +1,6 @@
 import "server-only";
 import sharp from "sharp";
+import { UPLIFT_TARGETS, MAX_OUTPUT_EDGE } from "@/lib/validation/jobs";
 import type {
   CutoutInput,
   EraseInput,
@@ -122,6 +123,32 @@ function removeSmallRegions(map: Uint8Array, w: number, h: number, value: 0 | 1,
   }
 }
 
+/**
+ * Luma gradient magnitude (|dx| + |dy|) per pixel — used to stop the background
+ * flood fill at the subject's silhouette. This is what keeps a shirt whose
+ * colour is close to the background from being "flooded away": the strong edge
+ * between subject and background halts propagation even when the colours match.
+ */
+function gradientMag(data: Uint8Array | Buffer, w: number, h: number): Float32Array {
+  const luma = new Float32Array(w * h);
+  for (let p = 0; p < w * h; p++) {
+    const i = p * 4;
+    luma[p] = 0.299 * data[i]! + 0.587 * data[i + 1]! + 0.114 * data[i + 2]!;
+  }
+  const g = new Float32Array(w * h);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const p = y * w + x;
+      const xl = x > 0 ? p - 1 : p;
+      const xr = x < w - 1 ? p + 1 : p;
+      const yt = y > 0 ? p - w : p;
+      const yb = y < h - 1 ? p + w : p;
+      g[p] = Math.abs(luma[xr]! - luma[xl]!) + Math.abs(luma[yb]! - luma[yt]!);
+    }
+  }
+  return g;
+}
+
 /** Per-channel median of the 1px image border — a robust background estimate. */
 function borderMedian(data: Uint8Array | Buffer, w: number, h: number): [number, number, number] {
   const rs: number[] = [], gs: number[] = [], bs: number[] = [];
@@ -154,14 +181,29 @@ export function createLocalInference(): InferenceAdapter {
       //    that touches an edge better than a mean).
       const [br, bg, bb] = borderMedian(data, w, h);
 
-      // 2. Flood-fill the connected background inward from every border pixel.
-      //    A hard mask of what is *definitely* background.
+      // Edge map: the flood must not cross the subject's silhouette, so it can't
+      // eat a body/shirt whose colour happens to match the background.
+      const grad = gradientMag(data, w, h);
+      let gMean = 0;
+      for (let p = 0; p < px; p++) gMean += grad[p]!;
+      gMean /= px;
+      let gVar = 0;
+      for (let p = 0; p < px; p++) gVar += (grad[p]! - gMean) ** 2;
+      const gStd = Math.sqrt(gVar / px);
+      // A pixel is "on an edge" when its gradient clearly exceeds the image's
+      // typical gradient. The flood stops at such pixels.
+      const edgeThreshold = Math.max(24, gMean + 2.0 * gStd);
+
+      // 2. Flood-fill the connected background inward from every border pixel,
+      //    propagating only through near-background colour AND low-gradient
+      //    (non-edge) pixels. A hard mask of what is *definitely* background.
       const tol2 = 42 * 42; // squared colour tolerance
       const isBg = new Uint8Array(px);
       const stack: number[] = [];
       const pushIfBg = (x: number, y: number) => {
         const p = y * w + x;
         if (isBg[p]) return;
+        if (grad[p]! > edgeThreshold) return; // don't cross the subject outline
         if (colorDist2(data, p * 4, br, bg, bb) <= tol2) { isBg[p] = 1; stack.push(p); }
       };
       for (let x = 0; x < w; x++) { pushIfBg(x, 0); pushIfBg(x, h - 1); }
@@ -181,6 +223,14 @@ export function createLocalInference(): InferenceAdapter {
       const minRegion = Math.max(16, Math.round(px * 0.0004));
       removeSmallRegions(isBg, w, h, 0, minRegion); // fill subject pinholes
       removeSmallRegions(isBg, w, h, 1, minRegion); // drop background specks
+
+      // 3b. Grow the foreground by a couple of pixels (erode the background) so
+      //     clothing/body contours aren't truncated at the silhouette, per the
+      //     full-body fix. Dilate the FG mask, then invert back to background.
+      const fg255 = new Uint8Array(px);
+      for (let p = 0; p < px; p++) fg255[p] = isBg[p] ? 0 : 255;
+      const fgGrown = dilateMask(fg255, w, h, 2);
+      for (let p = 0; p < px; p++) isBg[p] = fgGrown[p] ? 0 : 1;
 
       // 4. Soft alpha. Start from the hard mask, then anti-alias the boundary by
       //    a distance-aware colour ramp so edges follow the real colour gradient
@@ -389,44 +439,61 @@ export function createLocalInference(): InferenceAdapter {
       if (!sw || !sh) throw new Error("upscale: could not decode image dimensions");
       const hasAlpha = !!meta.hasAlpha;
 
-      // Exact target long edge, aspect ratio preserved to the pixel.
+      // Exact target long edge, aspect ratio preserved to the pixel, clamped to
+      // the 8192px output ceiling (supports up to 8K).
       const longEdge = Math.max(sw, sh);
-      const scale = input.targetLongEdge / longEdge;
-      const outW = Math.max(1, Math.round(sw * scale));
-      const outH = Math.max(1, Math.round(sh * scale));
+      const targetLong = Math.min(input.targetLongEdge, MAX_OUTPUT_EDGE);
+      const scale = targetLong / longEdge;
+      let outW = Math.max(1, Math.round(sw * scale));
+      let outH = Math.max(1, Math.round(sh * scale));
+      if (Math.max(outW, outH) > MAX_OUTPUT_EDGE) {
+        const c = MAX_OUTPUT_EDGE / Math.max(outW, outH);
+        outW = Math.max(1, Math.round(outW * c));
+        outH = Math.max(1, Math.round(outH * c));
+      }
 
-      let pipe = sharp(Buffer.from(input.bytes), { failOn: "none" });
+      let pipe = sharp(Buffer.from(input.bytes), { failOn: "none", limitInputPixels: false });
 
-      // Denoise before enlarging (cleans source noise so it isn't magnified).
+      // Denoise before enlarging (edge-preserving median) so source noise isn't
+      // magnified into the upscaled result.
       if (input.params.denoise > 0) {
         pipe = pipe.median(input.params.denoise > 60 ? 3 : 1);
       }
 
-      // Lanczos-3 is the highest-quality general resampling kernel sharp offers.
-      pipe = pipe.resize(outW, outH, {
-        kernel: "lanczos3",
-        fit: "fill",
-        withoutEnlargement: false,
-      });
+      // Lanczos-3 — the highest-quality general resampling kernel sharp offers.
+      pipe = pipe.resize(outW, outH, { kernel: "lanczos3", fit: "fill", withoutEnlargement: false });
 
-      // Unsharp mask to recover the acuity resampling softens. A mild amount is
-      // applied by default when we actually enlarged (counters Lanczos softness);
-      // the user's sharpen slider adds on top. Kept modest to avoid halos/noise.
+      // High-fidelity post-processing so the result is genuinely crisp, not a
+      // flat stretch. Applied only when we actually enlarged; the sharpen slider
+      // scales the intensity. sharp operates in linear light, so colour is safe.
       if (scale > 1.001) {
-        const extra = input.params.sharpen / 100; // 0..1
+        const extra = input.params.sharpen / 100; // 0..1 from the slider
+        const strong = targetLong >= UPLIFT_TARGETS["4k"]; // 4K/8K get a touch more
+
+        // 1. Unsharp mask (detail) — fine-radius, edge-biased.
         pipe = pipe.sharpen({
-          sigma: 0.7 + extra * 0.8,
-          m1: 0.6 + extra * 0.6, // flat-area sharpening (kept low → no noise)
-          m2: 1.8 + extra * 1.5, // edge sharpening
+          sigma: 0.8 + extra * 0.7,
+          m1: 0.7 + extra * 0.6,                 // flat-area sharpening (noise-safe)
+          m2: (strong ? 2.4 : 2.0) + extra * 1.5, // edge sharpening
         });
+
+        // 2. Contrast-adaptive sharpening (CAS-like) + edge preservation: a
+        //    second, larger-radius, flat-weighted unsharp adds local "clarity"
+        //    and keeps edges defined across the larger canvas, without the
+        //    haloing of naive sharpening. (A CLAHE pass was measured far too
+        //    slow at 4K/8K to fit the job timeout, so this clarity pass — which
+        //    is both fast and colour-safe in linear light — stands in for it.)
+        pipe = pipe.sharpen({ sigma: 2.2, m1: 0.5 + extra * 0.4, m2: 0 });
       } else if (input.params.sharpen > 0) {
         pipe = pipe.sharpen({ sigma: 0.5 + (input.params.sharpen / 100) * 1.5 });
       }
 
       if (hasAlpha) pipe = pipe.ensureAlpha();
 
-      // PNG output is lossless → no colour degradation or recompression artifacts.
-      const png = await pipe.png({ compressionLevel: 9 }).toBuffer({ resolveWithObject: true });
+      // PNG output is lossless → no colour degradation or recompression
+      // artifacts. Level 6 (sharp's default) keeps encode time well within the
+      // job timeout even at 8K, where level 9 is far too slow for marginal gain.
+      const png = await pipe.png({ compressionLevel: 6 }).toBuffer({ resolveWithObject: true });
       return {
         bytes: new Uint8Array(png.data),
         contentType: "image/png",

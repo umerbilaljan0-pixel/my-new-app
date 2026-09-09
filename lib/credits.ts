@@ -11,9 +11,12 @@ import type { Job } from "@/lib/db/types";
 /** The primary on-ramp: 20 HD credits for $2, one time (Section 11.3). */
 export const STARTER_PACK = { credits: 20, amountCents: 200, label: "20 credits for $2" };
 
-/** HD cost for a job: a 4K upscale is 2, everything else is 1 (Section 11.3). */
+/** HD cost for a job: 8K upscale is 3, 4K is 2, everything else 1 (Section 11.3). */
 export function hdCostForJob(job: Job): number {
-  if (job.tool === "uplift" && job.params.tool === "uplift" && job.params.target === "4k") return 2;
+  if (job.tool === "uplift" && job.params.tool === "uplift") {
+    if (job.params.target === "8k") return 3;
+    if (job.params.target === "4k") return 2;
+  }
   return 1;
 }
 

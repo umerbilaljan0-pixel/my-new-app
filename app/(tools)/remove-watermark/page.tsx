@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { ToolStudio } from "@/components/tool/ToolStudio";
 import { ToolContent } from "@/components/marketing/ToolContent";
+import { VideoPreview } from "@/components/marketing/VideoPreview";
 import { TOOL_CONTENT } from "@/lib/content/tools";
 import { ogImage } from "@/lib/seo";
 import { TRUST_LINE } from "@/lib/nav";
@@ -25,6 +26,14 @@ export default function RemoveWatermarkPage() {
       <div className="mx-auto mt-10 max-w-[640px]">
         <ToolStudio initialTool="erase" />
         <p className="mt-4 text-center text-2xs text-ink-low">{TRUST_LINE}</p>
+      </div>
+      <div className="mx-auto mt-14 max-w-2xl">
+        <VideoPreview
+          src="/media/watermark-eraser.mp4"
+          label="Erasing a watermark and text from a photo while the background stays intact"
+          className="shadow-float"
+        />
+        <p className="mt-3 text-center text-2xs text-ink-low">Watch text and watermarks vanish — the background is rebuilt behind them.</p>
       </div>
       <ToolContent content={c} />
     </div>

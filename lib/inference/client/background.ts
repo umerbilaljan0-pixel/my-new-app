@@ -36,9 +36,10 @@ export interface ClientBgResult {
 /** Remove the background in-browser. Resolves to a transparent PNG. */
 export async function removeBackgroundInBrowser(input: Blob): Promise<ClientBgResult> {
   const { removeBackground } = await loadImgly();
+  // Use the library's default model (full-quality RMBG/ISNet) so the whole
+  // connected subject — body and clothing, not just the face — is segmented.
+  // (Passing an invalid `model` value silently degrades results, so we omit it.)
   const blob = await removeBackground(input, {
-    // RMBG-1.4 weights; "medium" balances quality and download size.
-    model: "medium",
     output: { format: "image/png", quality: 1 },
   });
   const { width, height } = await dimensionsOf(blob);

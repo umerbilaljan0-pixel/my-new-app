@@ -1,5 +1,6 @@
 import "server-only";
 import sharp from "sharp";
+import { MAX_OUTPUT_EDGE } from "@/lib/validation/jobs";
 import type {
   CutoutInput,
   EraseInput,
@@ -129,13 +130,18 @@ export function createFalInference(cfg: FalConfig): InferenceAdapter {
         image_url: dataUri(input.bytes, input.contentType),
         scale,
       });
-      // Resample the model output to the exact requested long edge (Section 8.3).
-      const outScale = input.targetLongEdge / longEdge;
-      const outW = Math.max(1, Math.round(sw * outScale));
-      const outH = Math.max(1, Math.round(sh * outScale));
-      let pipe = sharp(Buffer.from(raw)).resize(outW, outH, { kernel: "lanczos3", fit: "fill" });
-      if (input.params.sharpen > 0) pipe = pipe.sharpen({ sigma: 0.5 + (input.params.sharpen / 100) * 1.2 });
-      const png = await pipe.png({ compressionLevel: 9 }).toBuffer({ resolveWithObject: true });
+      // Resample the model output to the exact requested long edge (Section 8.3),
+      // clamped to the 8192px ceiling, then a light sharpen + local contrast.
+      const targetLong = Math.min(input.targetLongEdge, MAX_OUTPUT_EDGE);
+      const outScale = targetLong / longEdge;
+      const outW = Math.max(1, Math.min(MAX_OUTPUT_EDGE, Math.round(sw * outScale)));
+      const outH = Math.max(1, Math.min(MAX_OUTPUT_EDGE, Math.round(sh * outScale)));
+      let pipe = sharp(Buffer.from(raw), { limitInputPixels: false }).resize(outW, outH, { kernel: "lanczos3", fit: "fill" });
+      const extra = input.params.sharpen / 100;
+      pipe = pipe
+        .sharpen({ sigma: 0.6 + extra * 0.8, m1: 0.5, m2: 1.8 + extra * 1.2 })
+        .sharpen({ sigma: 2.2, m1: 0.45, m2: 0 }); // CAS-like local clarity (fast, colour-safe)
+      const png = await pipe.png({ compressionLevel: 6 }).toBuffer({ resolveWithObject: true });
       return { bytes: new Uint8Array(png.data), contentType: "image/png", width: png.info.width, height: png.info.height };
     },
   };

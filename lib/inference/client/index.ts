@@ -7,7 +7,10 @@ import { upscaleInBrowser } from "./upscale";
 
 export { clientAIEnabled } from "./env";
 
-/** Long-edge box the chosen UPLIFT target resamples into (mirrors UPLIFT_TARGETS). */
+/** Long-edge box the chosen UPLIFT target resamples into (mirrors UPLIFT_TARGETS).
+ * 8K is intentionally absent: in-browser super-resolution to 8K is memory-
+ * prohibitive, so it routes to the server (which has the full sharpening chain
+ * and headroom). */
 const TARGET_LONG_EDGE: Record<string, number> = { "1080p": 1920, "2k": 2560, "4k": 3840 };
 
 export interface ClientToolResult {
@@ -39,7 +42,8 @@ export async function runClientTool(
       return { blob: r.blob, width: r.width, height: r.height, provider: "client-wasm:rmbg" };
     }
     if (params.tool === "uplift") {
-      const target = TARGET_LONG_EDGE[params.target] ?? 1920;
+      const target = TARGET_LONG_EDGE[params.target];
+      if (!target) return null; // 8K → server path
       const r = await upscaleInBrowser(input, target);
       return { blob: r.blob, width: r.width, height: r.height, provider: "client-wasm:swin2sr" };
     }
