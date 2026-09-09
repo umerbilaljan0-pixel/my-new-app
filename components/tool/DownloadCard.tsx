@@ -12,6 +12,8 @@ export interface DownloadCardProps {
   width?: number;
   height?: number;
   bytes?: number;
+  /** Client-computed (browser WASM) result — full resolution downloads free. */
+  freeHd?: boolean;
 }
 
 /**
@@ -21,7 +23,7 @@ export interface DownloadCardProps {
  * once). The purchase returns to this exact result via ?restore (session
  * restore, Section 9.5).
  */
-export function DownloadCard({ jobId, width, height, bytes }: DownloadCardProps) {
+export function DownloadCard({ jobId, width, height, bytes, freeHd }: DownloadCardProps) {
   const { user, refresh } = useAuth();
   const { toast } = useToast();
   const [busy, setBusy] = useState(false);
@@ -51,6 +53,19 @@ export function DownloadCard({ jobId, width, height, bytes }: DownloadCardProps)
   };
 
   const hdColumn = () => {
+    if (freeHd) {
+      // Computed in the visitor's browser — full resolution is free, no sign-in.
+      return (
+        <a
+          href={`/api/jobs/${jobId}/download?quality=full`}
+          download
+          onClick={() => track("download_hd", { jobId, engine: "client-wasm" })}
+          className="mt-auto inline-flex h-11 items-center justify-center gap-2 rounded-md bg-amber px-5 text-sm font-semibold text-white transition-colors hover:bg-amber-press active:scale-[0.98]"
+        >
+          <Download size={16} /> Download full res
+        </a>
+      );
+    }
     if (!user) {
       return (
         <a
@@ -114,7 +129,7 @@ export function DownloadCard({ jobId, width, height, bytes }: DownloadCardProps)
             </span>
           </div>
           <span className="tabular text-2xs font-semibold text-amber-press">
-            {user && user.credits > 0 ? `${user.credits} left` : "1 credit"}
+            {freeHd ? "Free" : user && user.credits > 0 ? `${user.credits} left` : "1 credit"}
           </span>
         </div>
         {hdColumn()}

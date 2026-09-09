@@ -16,6 +16,8 @@ import { ErrorState } from "@/components/ui/ErrorState";
 import { formatBytes } from "@/lib/format";
 import { startUpload, uploadBlob, UploadError, type UploadHandle } from "@/lib/upload/uploadClient";
 import { createJob, pollJob, detectOverlays, JobError } from "@/lib/jobs/client";
+import { clientAIEnabled, runClientTool } from "@/lib/inference/client";
+import { ingestClientResult } from "@/lib/jobs/ingest-client";
 import { track } from "@/lib/analytics";
 import type { DetectBox, JobParams, Tool, UpliftTarget } from "@/lib/validation/jobs";
 
@@ -36,6 +38,8 @@ interface ResultData {
   width?: number;
   height?: number;
   bytes?: number;
+  /** Client-computed (browser WASM) results download at full res for free. */
+  freeHd?: boolean;
 }
 
 export interface ToolStudioProps {
@@ -66,6 +70,9 @@ export function ToolStudio({ initialTool }: ToolStudioProps) {
   const uploadRef = useRef<UploadHandle | null>(null);
   const pollAbortRef = useRef<AbortController | null>(null);
   const objectUrlRef = useRef<string | null>(null);
+  // The processed bytes of the current upload, kept for in-browser (client AI)
+  // inference. Only valid for a fresh upload — cleared on reset/chain.
+  const inputBlobRef = useRef<Blob | null>(null);
 
   useEffect(() => {
     return () => {
@@ -114,6 +121,44 @@ export function ToolStudio({ initialTool }: ToolStudioProps) {
     async (params: JobParams, src: Source) => {
       setPhase("processing");
       try {
+        // Free-tier path: run the real model in the browser (client-side WASM)
+        // for fresh-upload CUTOUT/UPLIFT, then register the result. Any failure
+        // silently falls through to the server path below.
+        if (
+          src.kind === "upload" &&
+          inputBlobRef.current &&
+          clientAIEnabled() &&
+          (params.tool === "cutout" || params.tool === "uplift")
+        ) {
+          try {
+            const client = await runClientTool(params, inputBlobRef.current);
+            if (client) {
+              const created = await ingestClientResult({
+                inputKey: src.inputKey,
+                inputHash: src.inputHash,
+                params,
+                provider: client.provider,
+                blob: client.blob,
+                inputWidth: src.width,
+                inputHeight: src.height,
+              });
+              const controller = new AbortController();
+              pollAbortRef.current = controller;
+              const done = await pollJob(created.jobId, { signal: controller.signal });
+              if (done.previewUrl) {
+                setResult({ jobId: created.jobId, previewUrl: done.previewUrl, width: done.meta?.width, height: done.meta?.height, bytes: done.meta?.bytes, freeHd: true });
+                setPhase("result");
+                track("job_completed", { tool: params.tool, cached: false, engine: "client-wasm" });
+                return;
+              }
+            }
+          } catch (clientErr) {
+            // Cancellation is a real stop; anything else → fall back to server.
+            if (clientErr instanceof JobError && clientErr.code === "CANCELLED") throw clientErr;
+            console.warn("[client-ai] ingest failed, using server path:", clientErr);
+          }
+        }
+
         const req =
           src.kind === "upload"
             ? { inputKey: src.inputKey, inputHash: src.inputHash, inputWidth: src.width, inputHeight: src.height, params }
@@ -174,6 +219,8 @@ export function ToolStudio({ initialTool }: ToolStudioProps) {
       uploadRef.current = handle;
       handle.promise.then(
         ({ key, processed }) => {
+          // Keep the processed bytes for in-browser (client AI) inference.
+          inputBlobRef.current = processed.blob;
           const src: Source = { kind: "upload", inputKey: key, inputHash: processed.sha256, width: processed.width, height: processed.height };
           setSource(src);
           void enterTool(tool, src);
@@ -189,6 +236,7 @@ export function ToolStudio({ initialTool }: ToolStudioProps) {
     pollAbortRef.current?.abort();
     if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
     objectUrlRef.current = null;
+    inputBlobRef.current = null;
     setTool(initialTool);
     setPhase("idle");
     setSource(null);
@@ -243,6 +291,9 @@ export function ToolStudio({ initialTool }: ToolStudioProps) {
         URL.revokeObjectURL(objectUrlRef.current);
         objectUrlRef.current = null;
       }
+      // The chained input is a prior server output, not a fresh upload — the
+      // client blob is stale, so chained jobs run on the server.
+      inputBlobRef.current = null;
       setDisplayUrl(result.previewUrl);
       setSource(src);
       setResult(null);
@@ -347,7 +398,7 @@ export function ToolStudio({ initialTool }: ToolStudioProps) {
           {result.width && result.height ? `${result.width} × ${result.height} · ` : ""}
           PNG{result.bytes ? ` · ${formatBytes(result.bytes)}` : ""}
         </p>
-        <DownloadCard jobId={result.jobId} width={result.width} height={result.height} bytes={result.bytes} />
+        <DownloadCard jobId={result.jobId} width={result.width} height={result.height} bytes={result.bytes} freeHd={result.freeHd} />
         <ChainButtons currentTool={tool} onChain={chainTo} />
         <div className="text-center">
           <Button variant="ghost" size="sm" leadingIcon={<RotateCcw size={14} />} onClick={reset}>

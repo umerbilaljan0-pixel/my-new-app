@@ -1,11 +1,11 @@
 import "server-only";
-import sharp from "sharp";
 import { getStorage } from "@/lib/storage";
 import { outputKey, previewKey } from "@/lib/storage/keys";
 import { getInference } from "@/lib/inference";
 import { jobStore } from "@/lib/db/store";
 import type { Job } from "@/lib/db/types";
-import { JOB_MAX_ATTEMPTS, JOB_TIMEOUT_MS, PREVIEW_LONG_EDGE } from "./config";
+import { JOB_MAX_ATTEMPTS, JOB_TIMEOUT_MS } from "./config";
+import { makePreview } from "./preview";
 import { UPLIFT_TARGETS } from "@/lib/validation/jobs";
 import { captureException } from "@/lib/observability/sentry";
 import { refundCredits } from "@/lib/credits";
@@ -139,17 +139,9 @@ async function runToolOnce(job: Job): Promise<ToolResult> {
   const oKey = outputKey(job.id);
   await storage.put("outputs", oKey, result.bytes, result.contentType);
 
-  const previewBuf = await sharp(Buffer.from(result.bytes))
-    .resize({
-      width: result.width >= result.height ? PREVIEW_LONG_EDGE : undefined,
-      height: result.height > result.width ? PREVIEW_LONG_EDGE : undefined,
-      fit: "inside",
-      withoutEnlargement: true,
-    })
-    .png()
-    .toBuffer();
+  const previewBytes = await makePreview(result.bytes, result.width, result.height);
   const pKey = previewKey(job.id);
-  await storage.put("outputs", pKey, new Uint8Array(previewBuf), "image/png");
+  await storage.put("outputs", pKey, previewBytes, "image/png");
 
   return {
     outputKey: oKey,
